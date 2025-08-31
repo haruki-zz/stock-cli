@@ -54,7 +54,7 @@ pub enum Commands {
 pub fn show_banner() {
     println!("# ------------------------------------------------------------------------ #");
     println!("# Stock Information Fetcher (Rust Edition)");
-    println!("# Author: Converted from Python to Rust");
+    println!("# Author: haruki-zhang");
     println!("# FOR PERSONAL USE ONLY");
     println!("#");
     println!("# Project created on: 2024/10/02");

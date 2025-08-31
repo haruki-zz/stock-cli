@@ -1,0 +1,88 @@
+{
+    "CN": {
+        "infoIdxs": {
+            "stockName": {
+                "index": 1,
+                "valid": true
+            },
+            "stockCode": {
+                "index": 2,
+                "valid": true
+            },
+            "curr": {
+                "index": 3,
+                "valid": true
+            },
+            "prevClosed": {
+                "index": 4,
+                "valid": true
+            },
+            "open": {
+                "index": 5,
+                "valid": true
+            },
+            "increase": {
+                "index": 32,
+                "valid": true
+            },
+            "highest": {
+                "index": 33,
+                "valid": true
+            },
+            "lowest": {
+                "index": 34,
+                "valid": true
+            },
+            "turnOver": {
+                "index": 38,
+                "valid": true
+            },
+            "amp": {
+                "index": 43,
+                "valid": true
+            },
+            "tm": {
+                "index": 44,
+                "valid": true
+            }
+        },
+        "thre": {
+            "amp": {
+                "lower": 3,
+                "upper": 6,
+                "valid": false
+            },
+            "turnOver": {
+                "lower": 5,
+                "upper": 10,
+                "valid": true
+            },
+            "tm": {
+                "lower": 50,
+                "upper": 120,
+                "valid": true
+            },
+            "increase": {
+                "lower": 3,
+                "upper": 5,
+                "valid": true
+            }
+        },
+        "urls": {
+            "request": {
+                "prefix": "http://ifzq.gtimg.cn/appstock/app/kline/mkline?param=",
+                "suffix": ",m1,,10",
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                    "Referer": "http://ifzq.gtimg.cn/appstock/app/kline",
+                    "Accept-Language": "en-US,en;q=0.9"
+                },
+                "valid": true
+            },
+            "firewallWarning": {
+                "text": "window.location.href=\"https://waf.tencent.com/501page.html?u=",
+                "valid": true
+            }   
+        }
+    }
+}

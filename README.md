@@ -5,7 +5,7 @@ A high-performance CLI application for fetching and analyzing Chinese A-share st
 ## Features
 
 - **Async Stock Data Fetching**: Concurrent HTTP requests with configurable rate limiting
-- **Interactive & CLI Modes**: Both interactive REPL and direct command execution
+- **Interactive Menu Navigation**: Arrow key navigation similar to Claude CLI
 - **Data Persistence**: Automatic CSV storage with timestamp-based file naming
 - **Stock Filtering**: Filter stocks based on configurable thresholds (turnover, increase rate, etc.)
 - **Progress Tracking**: Real-time progress indicators during data fetching
@@ -64,45 +64,26 @@ The application uses `config.json` for configuration. The file contains:
 
 ## Usage
 
-### Interactive Mode (Default)
+### Interactive Mode (Only Mode)
 ```bash
-./stock-cli interactive
+./stock-cli
 ```
 
-Available commands in interactive mode:
-- `show <stock_code>`: Display information for specific stock(s)
-- `update`: Fetch fresh stock data from API
-- `filter`: Show stocks that match filtering criteria
-- `load <filename>`: Load data from a CSV file
-- `exit`: Exit the application
+The application starts in interactive mode with arrow key navigation:
 
-### Direct Commands
+**Navigation:**
+- **↑/↓ Arrow Keys**: Navigate between menu options
+- **Enter**: Select the highlighted option
+- **Esc** or **Ctrl+C**: Exit the application
 
-#### Update stock data
-```bash
-./stock-cli update --output-dir raw_data
-```
+**Available Options:**
+- **Update Stock Data**: Fetch fresh stock information from API
+- **Show Stock Info**: Display information for specific stock codes (you'll be prompted to enter codes)
+- **Filter Stocks**: Show stocks matching configured thresholds
+- **Load from File**: Load stock data from CSV file (you'll be prompted to enter filename)
+- **Exit**: Exit the application
 
-#### Show specific stocks
-```bash
-./stock-cli show sh600000 sz000001 --from-file raw_data/2024_01_01_12_00_raw.csv
-```
-
-#### Filter stocks based on thresholds
-```bash
-./stock-cli filter --from-file raw_data/latest.csv
-```
-
-#### Load and display data from CSV
-```bash
-./stock-cli load raw_data/2024_01_01_12_00_raw.csv
-```
-
-### Options
-
-- `--region`: Specify region code (default: "CN")
-- `--config`: Path to config file (default: "config.json")  
-- `--stock-codes`: Path to stock codes CSV file (default: "stock_code.csv")
+The interface is designed similar to Claude CLI with a clean menu system and intuitive navigation.
 
 ## Stock Codes File
 

@@ -1,63 +1,45 @@
-mod cli;
 mod config;
 mod stock;
+mod menu;
 
 use anyhow::{Context, Result};
 use chrono::Local;
-use clap::Parser;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
-use cli::{Cli, Commands};
 use config::Config;
 use stock::{AsyncStockFetcher, StockDatabase};
+use menu::{Menu, MenuAction};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
-
-    match cli.command {
-        Commands::Interactive => {
-            run_interactive_mode(&cli).await?;
-        }
-        Commands::Update { ref output_dir } => {
-            update_stock_data(&cli, output_dir).await?;
-        }
-        Commands::Show { ref codes, ref from_file } => {
-            show_stocks(&cli, codes, from_file.as_deref()).await?;
-        }
-        Commands::Filter { ref from_file } => {
-            filter_stocks(&cli, from_file.as_deref()).await?;
-        }
-        Commands::Load { ref file } => {
-            load_and_show(file).await?;
-        }
-    }
-
-    Ok(())
+    run_interactive_mode().await
 }
 
-async fn run_interactive_mode(cli: &Cli) -> Result<()> {
-    cli::show_banner();
+async fn run_interactive_mode() -> Result<()> {
+    // Default configuration paths
+    let config_path = "config.json";
+    let stock_codes_path = "stock_code.csv";
+    let region = "CN";
     
     // Load configuration
-    let config = Config::load(&cli.config)
+    let config = Config::load(config_path)
         .context("Failed to load configuration")?;
     
-    let region_config = config.get_region_config(&cli.region)
+    let region_config = config.get_region_config(region)
         .context("Region not found in config")?
         .clone();
     
-    let info_indices = config.get_valid_info_indices(&cli.region)
+    let info_indices = config.get_valid_info_indices(region)
         .context("No valid info indices found")?;
     
-    let thresholds = config.get_valid_thresholds(&cli.region)
+    let thresholds = config.get_valid_thresholds(region)
         .unwrap_or_default();
 
     // Load stock codes
-    let stock_codes = load_stock_codes(&cli.stock_codes)?;
+    let stock_codes = load_stock_codes(stock_codes_path)?;
     
     // Create raw data directory
     let raw_data_dir = "raw_data";
@@ -74,71 +56,66 @@ async fn run_interactive_mode(cli: &Cli) -> Result<()> {
         info_indices.clone(),
     ).await?;
 
-    // Interactive loop
+    // Main interactive loop
     loop {
-        print!("Waiting for command: ");
-        io::stdout().flush().unwrap();
-        
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)
-            .context("Failed to read user input")?;
-        
-        let input = input.trim().to_lowercase();
-        let parts: Vec<&str> = input.split_whitespace().collect();
-        
-        if parts.is_empty() {
-            continue;
-        }
+        let mut menu = Menu::new();
+        let action = menu.navigate()?;
 
-        match parts[0] {
-            "exit" => {
-                println!("Exiting...");
-                break;
-            }
-            "show" => {
-                if parts.len() > 1 {
-                    let codes: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-                    database.show_stock_info(&codes);
-                } else {
-                    println!("Usage: show <stock_code1> [stock_code2] ...");
-                }
-            }
-            "update" => {
+        match action {
+            MenuAction::Update => {
                 println!("Fetching new data...");
                 match fetch_new_data(raw_data_dir, &stock_codes, 
                                    region_config.clone(), info_indices.clone()).await {
                     Ok(new_data) => {
                         database.update(new_data);
-                        println!("Update stock information successfully.");
+                        println!("Stock information updated successfully.");
                     }
                     Err(e) => {
                         println!("Failed to update stock information: {}", e);
                     }
                 }
+                wait_for_key();
             }
-            "filter" => {
-                println!("Filtering stock with default thresholds...");
+            MenuAction::Show => {
+                let codes = get_stock_codes_input()?;
+                if !codes.is_empty() {
+                    database.show_stock_info(&codes);
+                } else {
+                    println!("No stock codes entered.");
+                }
+                wait_for_key();
+            }
+            MenuAction::Filter => {
+                println!("Filtering stocks with default thresholds...");
                 let filtered_codes = database.filter_stocks(&thresholds);
-                println!("Filtering results:");
-                database.show_stock_info(&filtered_codes);
+                if filtered_codes.is_empty() {
+                    println!("No stocks match the filtering criteria.");
+                } else {
+                    println!("Filtering results:");
+                    database.show_stock_info(&filtered_codes);
+                }
+                wait_for_key();
             }
-            "load" => {
-                if parts.len() > 1 {
-                    match StockDatabase::load_from_csv(parts[1]) {
+            MenuAction::Load => {
+                let filename = get_filename_input()?;
+                if !filename.is_empty() {
+                    match StockDatabase::load_from_csv(&filename) {
                         Ok(loaded_db) => {
                             database = loaded_db;
-                            println!("Data loaded from {}", parts[1]);
+                            println!("Data loaded from {}", filename);
                         }
                         Err(e) => {
-                            println!("Failed to load data from {}: {}", parts[1], e);
+                            println!("Failed to load data from {}: {}", filename, e);
                         }
                     }
                 } else {
-                    println!("Usage: load <filename>");
+                    println!("No filename entered.");
                 }
+                wait_for_key();
             }
-            _ => {
-                println!("Unknown command. Available commands: show, update, filter, load, exit");
+            MenuAction::Exit => {
+                println!("Exiting...");
+                break;
             }
         }
     }
@@ -146,100 +123,36 @@ async fn run_interactive_mode(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-async fn update_stock_data(cli: &Cli, output_dir: &str) -> Result<()> {
-    let config = Config::load(&cli.config)?;
-    let region_config = config.get_region_config(&cli.region)
-        .context("Region not found in config")?
-        .clone();
-    let info_indices = config.get_valid_info_indices(&cli.region)
-        .context("No valid info indices found")?;
-    let stock_codes = load_stock_codes(&cli.stock_codes)?;
-
-    if !Path::new(output_dir).exists() {
-        fs::create_dir_all(output_dir)?;
-    }
-
-    let data = fetch_new_data(output_dir, &stock_codes, region_config, info_indices).await?;
-    let database = StockDatabase::new(data);
+fn get_stock_codes_input() -> Result<Vec<String>> {
+    print!("Enter stock codes (separated by spaces): ");
+    io::stdout().flush()?;
     
-    let timestamp = Local::now().format("%Y_%m_%d_%H_%M");
-    let filename = format!("{}/{}_raw.csv", output_dir, timestamp);
-    database.save_to_csv(&filename)?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
     
-    println!("Data saved to {}", filename);
-    Ok(())
-}
-
-async fn show_stocks(cli: &Cli, codes: &[String], from_file: Option<&str>) -> Result<()> {
-    let database = if let Some(file_path) = from_file {
-        StockDatabase::load_from_csv(file_path)
-            .context("Failed to load data from file")?
-    } else {
-        // Need to fetch fresh data
-        let config = Config::load(&cli.config)?;
-        let region_config = config.get_region_config(&cli.region)
-            .context("Region not found in config")?
-            .clone();
-        let info_indices = config.get_valid_info_indices(&cli.region)
-            .context("No valid info indices found")?;
-        let stock_codes = load_stock_codes(&cli.stock_codes)?;
-        
-        let fetcher = AsyncStockFetcher::new(stock_codes, region_config, info_indices);
-        let data = fetcher.fetch_data().await?;
-        StockDatabase::new(data)
-    };
-
-    database.show_stock_info(codes);
-    Ok(())
-}
-
-async fn filter_stocks(cli: &Cli, from_file: Option<&str>) -> Result<()> {
-    let config = Config::load(&cli.config)?;
-    let thresholds = config.get_valid_thresholds(&cli.region)
-        .unwrap_or_default();
-
-    let database = if let Some(file_path) = from_file {
-        StockDatabase::load_from_csv(file_path)
-            .context("Failed to load data from file")?
-    } else {
-        // Need to fetch fresh data
-        let region_config = config.get_region_config(&cli.region)
-            .context("Region not found in config")?
-            .clone();
-        let info_indices = config.get_valid_info_indices(&cli.region)
-            .context("No valid info indices found")?;
-        let stock_codes = load_stock_codes(&cli.stock_codes)?;
-        
-        let fetcher = AsyncStockFetcher::new(stock_codes, region_config, info_indices);
-        let data = fetcher.fetch_data().await?;
-        StockDatabase::new(data)
-    };
-
-    let filtered_codes = database.filter_stocks(&thresholds);
-    println!("Filtering results:");
-    database.show_stock_info(&filtered_codes);
-    Ok(())
-}
-
-async fn load_and_show(file_path: &str) -> Result<()> {
-    let database = StockDatabase::load_from_csv(file_path)
-        .context("Failed to load data from file")?;
-    
-    println!("Loaded {} stock records from {}", database.data.len(), file_path);
-    
-    // Show first few records as sample
-    let sample_codes: Vec<String> = database.data
-        .iter()
-        .take(5)
-        .map(|stock| stock.stock_code.clone())
+    let codes: Vec<String> = input
+        .trim()
+        .split_whitespace()
+        .map(|s| s.to_string())
         .collect();
     
-    if !sample_codes.is_empty() {
-        println!("Sample data:");
-        database.show_stock_info(&sample_codes);
-    }
+    Ok(codes)
+}
+
+fn get_filename_input() -> Result<String> {
+    print!("Enter filename: ");
+    io::stdout().flush()?;
     
-    Ok(())
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    
+    Ok(input.trim().to_string())
+}
+
+fn wait_for_key() {
+    println!("\nPress Enter to continue...");
+    let mut input = String::new();
+    let _ = io::stdin().read_line(&mut input);
 }
 
 async fn load_or_fetch_data(
@@ -259,7 +172,7 @@ async fn load_or_fetch_data(
         .collect();
 
     if data_files.is_empty() {
-        println!("No previous data detected. Start fetching new data by default...");
+        println!("No previous data detected. Fetching new data...");
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         
         let data = fetch_new_data(raw_data_dir, stock_codes, region_config, info_indices).await?;
@@ -286,7 +199,7 @@ async fn load_or_fetch_data(
             StockDatabase::load_from_csv(file_path.to_str().unwrap())
                 .context("Failed to load existing data")
         } else {
-            println!("Start to fetch new data...");
+            println!("Fetching new data...");
             let data = fetch_new_data(raw_data_dir, stock_codes, region_config, info_indices).await?;
             Ok(StockDatabase::new(data))
         }
@@ -300,7 +213,7 @@ async fn fetch_new_data(
     info_indices: HashMap<String, config::InfoIndex>,
 ) -> Result<Vec<stock::StockData>> {
     let timestamp = Local::now().format("%Y_%m_%d_%H_%M");
-    println!("Start to fetch real-time data at time {} ...", timestamp);
+    println!("Fetching real-time data at {} ...", timestamp);
     
     let fetcher = AsyncStockFetcher::new(
         stock_codes.to_vec(),
@@ -311,14 +224,14 @@ async fn fetch_new_data(
     let data = fetcher.fetch_data().await
         .context("Failed to fetch stock data")?;
     
-    println!("Fetching complete. Start to save data...");
+    println!("Fetching complete. Saving data...");
     
     let database = StockDatabase::new(data.clone());
     let filename = format!("{}/{}_raw.csv", raw_data_dir, timestamp);
     database.save_to_csv(&filename)
         .context("Failed to save data to CSV")?;
     
-    println!("Finished. Real-time data information updated successfully...");
+    println!("Data saved successfully to {}", filename);
     
     Ok(data)
 }

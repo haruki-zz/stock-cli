@@ -3,12 +3,15 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     queue,
-    style::{Color, Print, ResetColor, SetForegroundColor},
-    terminal::{self, ClearType},
-    ExecutableCommand,
+    style::{Attribute, Print, Color, ResetColor, SetAttribute, SetForegroundColor},
+    terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand, QueueableCommand,
 };
 use std::io::{stdout, Write};
 use unicode_width::UnicodeWidthStr;
+
+const BANNER_HEIGHT: u16 = 10;
+const MENU_GAP: u16 = 1;
 
 pub struct MenuItem {
     pub label: String,
@@ -77,25 +80,42 @@ impl Menu {
         }
     }
 
+    fn menu_top() -> u16 {
+        BANNER_HEIGHT + MENU_GAP
+    }
+
     pub fn show_banner(&self) -> Result<()> {
+        let (cols, _) = terminal::size().unwrap_or((80, 24));
         let mut stdout = stdout();
         
         // Clear screen and hide cursor first
-        stdout.execute(terminal::Clear(ClearType::All))?;
-        stdout.execute(cursor::Hide)?;
+        stdout.queue(terminal::Clear(ClearType::All))?;
+        stdout.queue(cursor::Hide)?;
+
+        let line = "#".to_string() + &" ".repeat(1) + &"-".repeat(cols.saturating_sub(4) as usize) + &" ".repeat(1) + "#";
 
         // Queue all banner lines for batch processing
-        queue!(stdout, cursor::MoveTo(0, 0), Print("# ------------------------------------------------------------------------ #"))?;
-        queue!(stdout, cursor::MoveTo(0, 1), Print("# Stock Information Fetcher (Rust Edition)"))?;
-        queue!(stdout, cursor::MoveTo(0, 2), Print("# Author: haruki-zhang"))?;
-        queue!(stdout, cursor::MoveTo(0, 3), Print("# FOR PERSONAL USE ONLY"))?;
-        queue!(stdout, cursor::MoveTo(0, 4), Print("#"))?;
-        queue!(stdout, cursor::MoveTo(0, 5), Print("# Project created on: 2024/10/02"))?;
-        queue!(stdout, cursor::MoveTo(0, 6), Print(format!("# Executing date: {}", chrono::Local::now().format("%Y-%m-%d %H:%M"))))?;
-        queue!(stdout, cursor::MoveTo(0, 7), Print("#"))?;
-        queue!(stdout, cursor::MoveTo(0, 8), Print("# Use ↑/↓ arrows to navigate, Enter to select, Esc/Ctrl+C to exit"))?;
-        queue!(stdout, cursor::MoveTo(0, 9), Print("# ------------------------------------------------------------------------ #"))?;
-        
+        stdout.queue(cursor::MoveTo(0, 0))?;
+        stdout.queue(Print(&line))?;
+        stdout.queue(cursor::MoveTo(0, 1))?;
+        stdout.queue(Print("# Stock Information Fetcher (Rust Edition)"))?;
+        stdout.queue(cursor::MoveTo(0, 2))?;
+        stdout.queue(Print("# Author: haruki-zhang"))?;
+        stdout.queue(cursor::MoveTo(0, 3))?;
+        stdout.queue(Print("# FOR PERSONAL USE ONLY"))?;
+        stdout.queue(cursor::MoveTo(0, 4))?;
+        stdout.queue(Print("#"))?;
+        stdout.queue(cursor::MoveTo(0, 5))?;
+        stdout.queue(Print("# Project created on: 2024/10/02"))?;
+        stdout.queue(cursor::MoveTo(0, 6))?;
+        stdout.queue(Print(format!("# Executing date: {}", chrono::Local::now().format("%Y-%m-%d %H:%M"))))?;
+        stdout.queue(cursor::MoveTo(0, 7))?;
+        stdout.queue(Print("#"))?;
+        stdout.queue(cursor::MoveTo(0, 8))?;
+        stdout.queue(Print("# Use ↑/↓ arrows to navigate, Enter to select, Esc/Ctrl+C to exit"))?;
+        stdout.queue(cursor::MoveTo(0, 9))?;
+        stdout.queue(Print(&line))?;
+       
         // Flush all queued operations at once
         stdout.flush()?;
         Ok(())

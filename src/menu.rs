@@ -116,9 +116,12 @@ impl Menu {
         for (index, item) in self.items.iter().enumerate() {
             let padded_label = Self::pad_string_unicode(&item.label, max_label_width);
             
+            // Clear the entire line first to remove any artifacts
+            queue!(stdout, cursor::MoveTo(0, 11 + index as u16))?;
+            queue!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
+            
             if index == self.selected_index {
-                // Queue selected item with highlighting
-                queue!(stdout, cursor::MoveTo(0, 11 + index as u16))?;
+                // Selected item: "► " + padded_label + " - " + description
                 queue!(stdout, Print("► "))?;
                 queue!(stdout, SetForegroundColor(Color::Black))?;
                 queue!(stdout, crossterm::style::SetBackgroundColor(Color::White))?;
@@ -126,9 +129,8 @@ impl Menu {
                 queue!(stdout, ResetColor)?;
                 queue!(stdout, Print(format!(" - {}", item.description)))?;
             } else {
-                // Queue non-selected item with consistent spacing
-                queue!(stdout, cursor::MoveTo(0, 11 + index as u16))?;
-                queue!(stdout, Print(format!("  {}   - {}", padded_label, item.description)))?;
+                // Non-selected item: "  " + padded_label + " - " + description (same total width)
+                queue!(stdout, Print(format!("  {} - {}", padded_label, item.description)))?;
             }
         }
 

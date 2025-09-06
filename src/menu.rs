@@ -176,14 +176,17 @@ impl Menu {
         let mut result: Option<MenuAction> = None;
         loop {
             match event::read()? {
-                Event::Key(KeyEvent { code, modifiers, kind: KeyEventKind::Press, .. }) => {
+                Event::Key(KeyEvent { code, modifiers, kind, .. }) => {
+                    if matches!(kind, event::KeyEventKind::Release) {
+                        continue;
+                    }
                     match code {
-                        KeyCode::Up => {
+                        KeyCode::Up | KeyCode::Char('k') => {
                             self.selected_index = 
                                 (self.selected_index + self.items.len() - 1) % self.items.len();
                             self.display()?;
                         }
-                        KeyCode::Down => {
+                        KeyCode::Down | KeyCode::Char('j') => {
                             self.selected_index = (self.selected_index + 1) % self.items.len();
                             self.display()?;
                         }
@@ -195,18 +198,16 @@ impl Menu {
                             self.selected_index = self.items.len() - 1;
                             self.display()?;
                         }
-                        KeyCode::Char('k') => {
-                            self.selected_index = 
-                                (self.selected_index + self.items.len() - 1) % self.items.len();
-                            self.display()?;
-                        }
-                        KeyCode::Char('j')=> {
-                            self.selected_index = (self.selected_index + 1) % self.items.len();
-                            self.display()?;
-                        }
-                        KeyCode::Enter => {
-                            result = Some(self.items[self.selected_index].action.clone());
-                        }
+                        KeyCode::Enter | KeyCode::Char('\r') | KeyCode::Char('\n') => {
+                            let action = self.items[self.selected_index].action.clone();
+
+                            terminal::disable_raw_mode()?;
+                            let mut out = stdout();
+                            out.execute(LeaveAlternateScreen)?;
+                            out.execute(cursor::Show)?;
+
+                            return Ok(action);
+                        }                        
                         KeyCode::Esc => {
                             result = Some(MenuAction::Exit);
                             break;

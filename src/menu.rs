@@ -1,13 +1,9 @@
 use anyhow::Result;
 use crossterm::{
-    cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    queue,
-    style::{Attribute, Print, Color, ResetColor, SetAttribute, SetForegroundColor},
-    terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand, QueueableCommand,
+    cursor, event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}, execute, queue, style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor}, terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand, QueueableCommand
 };
-use std::io::{stdout, Write};
+use tokio::time::sleep;
+use std::{io::{stdout, Write}, mem::take, usize};
 use unicode_width::UnicodeWidthStr;
 
 const BANNER_HEIGHT: u16 = 10;
@@ -122,35 +118,45 @@ impl Menu {
     }
 
     pub fn display(&self) -> Result<()> {
+        let (cols, _) = terminal::size().unwrap_or((80, 24));
         let mut stdout = stdout();
-        
-        // Clear the menu area
-        stdout.execute(terminal::Clear(ClearType::FromCursorDown))?;
 
-        // Find the maximum label width for consistent alignment using Unicode width
         let max_label_width = self.items.iter()
-            .map(|item| item.label.width())
-            .max()
-            .unwrap_or(0);
-
+            .map(|it| UnicodeWidthStr::width(it.label.as_str()))
+            .max().unwrap_or(0);
+        
         for (index, item) in self.items.iter().enumerate() {
-            let padded_label = Self::pad_string_unicode(&item.label, max_label_width);
+            let y = Self::menu_top() + index as u16;
             
-            // Clear the entire line first to remove any artifacts
-            queue!(stdout, cursor::MoveTo(0, 11 + index as u16))?;
-            queue!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
-            
+            stdout.queue(cursor::MoveTo(0, y))?;
+            stdout.queue(terminal::Clear(ClearType::CurrentLine))?;
+
+            let label_w = UnicodeWidthStr::width(item.label.as_str());
+            let pad = max_label_width.saturating_sub(label_w);
+            let padded_label = format!("{}{}", item.label, " ".repeat(pad));
+
+            let head = if index == self.selected_index { "► " } else { "  " };
+            let tail = format!("   - {}", item.description);
+
+            stdout.queue(Print(head))?;
+
             if index == self.selected_index {
-                // Selected item: "► " + padded_label + " - " + description
-                queue!(stdout, Print("► "))?;
-                queue!(stdout, SetForegroundColor(Color::Black))?;
-                queue!(stdout, crossterm::style::SetBackgroundColor(Color::White))?;
-                queue!(stdout, Print(&padded_label))?;
-                queue!(stdout, ResetColor)?;
-                queue!(stdout, Print(format!(" - {}", item.description)))?;
-            } else {
-                // Non-selected item: "  " + padded_label + " - " + description (same total width)
-                queue!(stdout, Print(format!("  {} - {}", padded_label, item.description)))?;
+                stdout.queue(SetAttribute(Attribute::Reverse))?;
+            }
+            stdout.queue(Print(&padded_label))?;
+            if index == self.selected_index {
+                stdout.queue(SetAttribute(Attribute::Reset))?;
+            }
+
+            stdout.queue(Print(&tail))?;
+
+            let used_w = UnicodeWidthStr::width(
+                format!("{head}{padded_label}{tail}").as_str()
+            );
+            let term_cols = cols as usize;
+            let fill = term_cols.saturating_sub(used_w);
+            if fill > 0 {
+                stdout.queue(Print(" ".repeat(fill)))?;
             }
         }
 
@@ -160,65 +166,69 @@ impl Menu {
     }
 
     pub fn navigate(&mut self) -> Result<MenuAction> {
+        let mut out = stdout();
+        out.execute(EnterAlternateScreen)?;
         terminal::enable_raw_mode()?;
-        
+
         self.show_banner()?;
-        
-        // Position cursor for menu display
-        let mut stdout_handle = stdout();
-        queue!(stdout_handle, cursor::MoveTo(0, 11))?;
-        stdout_handle.flush()?;
         self.display()?;
 
+        let mut result: Option<MenuAction> = None;
         loop {
-            if let Event::Key(KeyEvent { 
-                code, 
-                modifiers, 
-                kind: event::KeyEventKind::Press,
-                .. 
-            }) = event::read()? {
-                match code {
-                    KeyCode::Up => {
-                        if self.selected_index > 0 {
-                            self.selected_index -= 1;
-                        } else {
-                            self.selected_index = self.items.len() - 1;
+            match event::read()? {
+                Event::Key(KeyEvent { code, modifiers, kind: KeyEventKind::Press, .. }) => {
+                    match code {
+                        KeyCode::Up => {
+                            self.selected_index = 
+                                (self.selected_index + self.items.len() - 1) % self.items.len();
+                            self.display()?;
                         }
-                        self.display()?;
-                    }
-                    KeyCode::Down => {
-                        if self.selected_index < self.items.len() - 1 {
-                            self.selected_index += 1;
-                        } else {
+                        KeyCode::Down => {
+                            self.selected_index = (self.selected_index + 1) % self.items.len();
+                            self.display()?;
+                        }
+                        KeyCode::Home => {
                             self.selected_index = 0;
+                            self.display()?;
                         }
-                        self.display()?;
+                        KeyCode::End => {
+                            self.selected_index = self.items.len() - 1;
+                            self.display()?;
+                        }
+                        KeyCode::Char('k') => {
+                            self.selected_index = 
+                                (self.selected_index + self.items.len() - 1) % self.items.len();
+                            self.display()?;
+                        }
+                        KeyCode::Char('j')=> {
+                            self.selected_index = (self.selected_index + 1) % self.items.len();
+                            self.display()?;
+                        }
+                        KeyCode::Enter => {
+                            result = Some(self.items[self.selected_index].action.clone());
+                        }
+                        KeyCode::Esc => {
+                            result = Some(MenuAction::Exit);
+                            break;
+                        }
+                        KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                            result = Some(MenuAction::Exit);
+                            break;
+                        }
+                        _ => {}
                     }
-                    KeyCode::Enter => {
-                        let action = self.items[self.selected_index].action.clone();
-                        terminal::disable_raw_mode()?;
-                        
-                        // Clear screen and show cursor
-                        let mut stdout_handle = stdout();
-                        queue!(stdout_handle, terminal::Clear(ClearType::All))?;
-                        queue!(stdout_handle, cursor::MoveTo(0, 0))?;
-                        queue!(stdout_handle, cursor::Show)?;
-                        stdout_handle.flush()?;
-                        
-                        return Ok(action);
-                    }
-                    KeyCode::Esc => {
-                        terminal::disable_raw_mode()?;
-                        return Ok(MenuAction::Exit);
-                    }
-                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        terminal::disable_raw_mode()?;
-                        return Ok(MenuAction::Exit);
-                    }
-                    _ => {}
                 }
+                Event::Resize(_, _) => {
+                    self.show_banner()?;
+                    self.display()?;
+                }
+                _ => {}
             }
         }
+        terminal::disable_raw_mode()?;
+        out.execute(LeaveAlternateScreen)?;
+        out.execute(cursor::Show)?;
+        Ok(result.expect("Unreachable: result is always set befor break."))
     }
 }
 

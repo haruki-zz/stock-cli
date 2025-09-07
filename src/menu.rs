@@ -1,9 +1,12 @@
 use anyhow::Result;
 use crossterm::{
-    cursor, event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}, execute, queue, style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor}, terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand, QueueableCommand
+    cursor,
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    style::{Attribute, Print, SetAttribute},
+    terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand, QueueableCommand,
 };
-use tokio::time::sleep;
-use std::{io::{stdout, Write}, mem::take, usize};
+use std::io::{stdout, Write};
 use unicode_width::UnicodeWidthStr;
 
 const BANNER_HEIGHT: u16 = 10;
@@ -30,17 +33,7 @@ pub struct Menu {
 }
 
 impl Menu {
-    /// Pad a string to a specific display width using Unicode-aware padding
-    fn pad_string_unicode(s: &str, width: usize) -> String {
-        let current_width = s.width();
-        if current_width >= width {
-            s.to_string()
-        } else {
-            let padding = width - current_width;
-            format!("{}{}", s, " ".repeat(padding))
-        }
-    }
-
+    /// Creates a new menu with default stock application options
     pub fn new() -> Self {
         let items = vec![
             MenuItem {
@@ -76,167 +69,254 @@ impl Menu {
         }
     }
 
+    /// Calculate the top position of the menu based on banner height and gap
     fn menu_top() -> u16 {
         BANNER_HEIGHT + MENU_GAP
     }
 
+    /// Get the maximum display width of all menu item labels
+    fn max_label_width(&self) -> usize {
+        self.items
+            .iter()
+            .map(|item| UnicodeWidthStr::width(item.label.as_str()))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Create a padded version of a label with Unicode-aware width calculation
+    fn pad_label(&self, label: &str, target_width: usize) -> String {
+        let current_width = UnicodeWidthStr::width(label);
+        let padding = target_width.saturating_sub(current_width);
+        format!("{}{}", label, " ".repeat(padding))
+    }
+
+    /// Create the banner border line that adapts to terminal width
+    fn create_border_line(terminal_width: u16) -> String {
+        let inner_width = terminal_width.saturating_sub(4) as usize;
+        format!("# {} #", "-".repeat(inner_width))
+    }
+
+    /// Display the application banner with border and information
     pub fn show_banner(&self) -> Result<()> {
         let (cols, _) = terminal::size().unwrap_or((80, 24));
         let mut stdout = stdout();
         
-        // Clear screen and hide cursor first
+        // Clear screen and hide cursor
         stdout.queue(terminal::Clear(ClearType::All))?;
         stdout.queue(cursor::Hide)?;
 
-        let line = "#".to_string() + &" ".repeat(1) + &"-".repeat(cols.saturating_sub(4) as usize) + &" ".repeat(1) + "#";
+        let border_line = Self::create_border_line(cols);
+        
+        let banner_lines = [
+            &border_line,
+            "# Stock Information Fetcher (Rust Edition)",
+            "# Author: haruki-zhang", 
+            "# FOR PERSONAL USE ONLY",
+            "#",
+            "# Project created on: 2024/10/02",
+            &format!("# Executing date: {}", chrono::Local::now().format("%Y-%m-%d %H:%M")),
+            "#",
+            "# Use ↑/↓ arrows to navigate, Enter to select, Esc/Ctrl+C to exit",
+            &border_line,
+        ];
 
         // Queue all banner lines for batch processing
-        stdout.queue(cursor::MoveTo(0, 0))?;
-        stdout.queue(Print(&line))?;
-        stdout.queue(cursor::MoveTo(0, 1))?;
-        stdout.queue(Print("# Stock Information Fetcher (Rust Edition)"))?;
-        stdout.queue(cursor::MoveTo(0, 2))?;
-        stdout.queue(Print("# Author: haruki-zhang"))?;
-        stdout.queue(cursor::MoveTo(0, 3))?;
-        stdout.queue(Print("# FOR PERSONAL USE ONLY"))?;
-        stdout.queue(cursor::MoveTo(0, 4))?;
-        stdout.queue(Print("#"))?;
-        stdout.queue(cursor::MoveTo(0, 5))?;
-        stdout.queue(Print("# Project created on: 2024/10/02"))?;
-        stdout.queue(cursor::MoveTo(0, 6))?;
-        stdout.queue(Print(format!("# Executing date: {}", chrono::Local::now().format("%Y-%m-%d %H:%M"))))?;
-        stdout.queue(cursor::MoveTo(0, 7))?;
-        stdout.queue(Print("#"))?;
-        stdout.queue(cursor::MoveTo(0, 8))?;
-        stdout.queue(Print("# Use ↑/↓ arrows to navigate, Enter to select, Esc/Ctrl+C to exit"))?;
-        stdout.queue(cursor::MoveTo(0, 9))?;
-        stdout.queue(Print(&line))?;
+        for (row, line) in banner_lines.iter().enumerate() {
+            stdout.queue(cursor::MoveTo(0, row as u16))?;
+            stdout.queue(Print(line))?;
+        }
        
-        // Flush all queued operations at once
         stdout.flush()?;
         Ok(())
     }
 
+    /// Render a single menu item with proper formatting and highlighting
+    fn render_menu_item(
+        &self,
+        stdout: &mut std::io::Stdout,
+        index: usize,
+        item: &MenuItem,
+        max_label_width: usize,
+        terminal_cols: usize,
+    ) -> Result<()> {
+        let y_position = Self::menu_top() + index as u16;
+        
+        stdout.queue(cursor::MoveTo(0, y_position))?;
+        stdout.queue(terminal::Clear(ClearType::CurrentLine))?;
+
+        let padded_label = self.pad_label(&item.label, max_label_width);
+        let is_selected = index == self.selected_index;
+        
+        let prefix = if is_selected { "► " } else { "  " };
+        let suffix = format!("   - {}", item.description);
+
+        stdout.queue(Print(prefix))?;
+
+        if is_selected {
+            stdout.queue(SetAttribute(Attribute::Reverse))?;
+        }
+        stdout.queue(Print(&padded_label))?;
+        if is_selected {
+            stdout.queue(SetAttribute(Attribute::Reset))?;
+        }
+
+        stdout.queue(Print(&suffix))?;
+
+        // Fill remaining space to prevent artifacts on terminal resize
+        self.fill_line_remainder(stdout, &format!("{prefix}{padded_label}{suffix}"), terminal_cols)?;
+        
+        Ok(())
+    }
+
+    /// Fill the remainder of a line with spaces to prevent display artifacts
+    fn fill_line_remainder(
+        &self,
+        stdout: &mut std::io::Stdout,
+        content: &str,
+        terminal_cols: usize,
+    ) -> Result<()> {
+        let used_width = UnicodeWidthStr::width(content);
+        let remaining_space = terminal_cols.saturating_sub(used_width);
+        
+        if remaining_space > 0 {
+            stdout.queue(Print(" ".repeat(remaining_space)))?;
+        }
+        
+        Ok(())
+    }
+
+    /// Display the menu items with proper formatting and highlighting
     pub fn display(&self) -> Result<()> {
         let (cols, _) = terminal::size().unwrap_or((80, 24));
         let mut stdout = stdout();
 
-        let max_label_width = self.items.iter()
-            .map(|it| UnicodeWidthStr::width(it.label.as_str()))
-            .max().unwrap_or(0);
+        let max_label_width = self.max_label_width();
+        let terminal_cols = cols as usize;
         
         for (index, item) in self.items.iter().enumerate() {
-            let y = Self::menu_top() + index as u16;
-            
-            stdout.queue(cursor::MoveTo(0, y))?;
-            stdout.queue(terminal::Clear(ClearType::CurrentLine))?;
-
-            let label_w = UnicodeWidthStr::width(item.label.as_str());
-            let pad = max_label_width.saturating_sub(label_w);
-            let padded_label = format!("{}{}", item.label, " ".repeat(pad));
-
-            let head = if index == self.selected_index { "► " } else { "  " };
-            let tail = format!("   - {}", item.description);
-
-            stdout.queue(Print(head))?;
-
-            if index == self.selected_index {
-                stdout.queue(SetAttribute(Attribute::Reverse))?;
-            }
-            stdout.queue(Print(&padded_label))?;
-            if index == self.selected_index {
-                stdout.queue(SetAttribute(Attribute::Reset))?;
-            }
-
-            stdout.queue(Print(&tail))?;
-
-            let used_w = UnicodeWidthStr::width(
-                format!("{head}{padded_label}{tail}").as_str()
-            );
-            let term_cols = cols as usize;
-            let fill = term_cols.saturating_sub(used_w);
-            if fill > 0 {
-                stdout.queue(Print(" ".repeat(fill)))?;
-            }
+            self.render_menu_item(&mut stdout, index, item, max_label_width, terminal_cols)?;
         }
 
-        // Flush all queued operations at once
         stdout.flush()?;
         Ok(())
     }
 
-    pub fn navigate(&mut self) -> Result<MenuAction> {
-        let mut out = stdout();
-        out.execute(EnterAlternateScreen)?;
+    /// Move selection up with wrapping
+    fn move_selection_up(&mut self) {
+        self.selected_index = (self.selected_index + self.items.len() - 1) % self.items.len();
+    }
+
+    /// Move selection down with wrapping
+    fn move_selection_down(&mut self) {
+        self.selected_index = (self.selected_index + 1) % self.items.len();
+    }
+
+    /// Move selection to the first item
+    fn move_to_first(&mut self) {
+        self.selected_index = 0;
+    }
+
+    /// Move selection to the last item
+    fn move_to_last(&mut self) {
+        self.selected_index = self.items.len() - 1;
+    }
+
+    /// Handle keyboard input and update selection accordingly
+    fn handle_key_input(&mut self, code: KeyCode, modifiers: KeyModifiers) -> Option<MenuAction> {
+        match code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.move_selection_up();
+                None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.move_selection_down();
+                None
+            }
+            KeyCode::Home => {
+                self.move_to_first();
+                None
+            }
+            KeyCode::End => {
+                self.move_to_last();
+                None
+            }
+            KeyCode::Enter | KeyCode::Char('\r') | KeyCode::Char('\n') => {
+                Some(self.items[self.selected_index].action.clone())
+            }
+            KeyCode::Esc => Some(MenuAction::Exit),
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(MenuAction::Exit)
+            }
+            _ => None,
+        }
+    }
+
+    /// Initialize terminal for interactive navigation
+    fn initialize_terminal(&self) -> Result<()> {
+        let mut stdout = stdout();
+        stdout.execute(EnterAlternateScreen)?;
         terminal::enable_raw_mode()?;
+        Ok(())
+    }
+
+    /// Cleanup terminal after navigation
+    fn cleanup_terminal(&self) -> Result<()> {
+        terminal::disable_raw_mode()?;
+        let mut stdout = stdout();
+        stdout.execute(LeaveAlternateScreen)?;
+        stdout.execute(cursor::Show)?;
+        Ok(())
+    }
+
+    /// Main navigation loop with keyboard input handling
+    pub fn navigate(&mut self) -> Result<MenuAction> {
+        self.initialize_terminal()?;
 
         self.show_banner()?;
         self.display()?;
 
-        let mut result: Option<MenuAction> = None;
-        loop {
+        let result = loop {
             match event::read()? {
                 Event::Key(KeyEvent { code, modifiers, kind, .. }) => {
+                    // Ignore key release events
                     if matches!(kind, event::KeyEventKind::Release) {
                         continue;
                     }
-                    match code {
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            self.selected_index = 
-                                (self.selected_index + self.items.len() - 1) % self.items.len();
-                            self.display()?;
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            self.selected_index = (self.selected_index + 1) % self.items.len();
-                            self.display()?;
-                        }
-                        KeyCode::Home => {
-                            self.selected_index = 0;
-                            self.display()?;
-                        }
-                        KeyCode::End => {
-                            self.selected_index = self.items.len() - 1;
-                            self.display()?;
-                        }
-                        KeyCode::Enter | KeyCode::Char('\r') | KeyCode::Char('\n') => {
-                            let action = self.items[self.selected_index].action.clone();
-
-                            terminal::disable_raw_mode()?;
-                            let mut out = stdout();
-                            out.execute(LeaveAlternateScreen)?;
-                            out.execute(cursor::Show)?;
-
-                            return Ok(action);
-                        }                        
-                        KeyCode::Esc => {
-                            result = Some(MenuAction::Exit);
-                            break;
-                        }
-                        KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                            result = Some(MenuAction::Exit);
-                            break;
-                        }
-                        _ => {}
+                    
+                    if let Some(action) = self.handle_key_input(code, modifiers) {
+                        break action;
+                    }
+                    
+                    // Redraw menu after navigation input
+                    if matches!(code, KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') | KeyCode::Home | KeyCode::End) {
+                        self.display()?;
                     }
                 }
                 Event::Resize(_, _) => {
                     self.show_banner()?;
                     self.display()?;
                 }
-                _ => {}
+                _ => {} // Ignore other events
             }
-        }
-        terminal::disable_raw_mode()?;
-        out.execute(LeaveAlternateScreen)?;
-        out.execute(cursor::Show)?;
-        Ok(result.expect("Unreachable: result is always set befor break."))
+        };
+
+        self.cleanup_terminal()?;
+        Ok(result)
     }
 }
 
 impl Drop for Menu {
+    /// Ensure terminal is properly cleaned up when Menu is dropped
     fn drop(&mut self) {
         let _ = terminal::disable_raw_mode();
+        let _ = stdout().execute(LeaveAlternateScreen);
         let _ = stdout().execute(cursor::Show);
+    }
+}
+
+impl Default for Menu {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

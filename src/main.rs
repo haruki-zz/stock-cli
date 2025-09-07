@@ -1,5 +1,6 @@
 mod config;
-mod stock;
+mod fetcher;
+mod database;
 mod menu;
 
 use anyhow::{Context, Result};
@@ -10,7 +11,8 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use config::Config;
-use stock::{AsyncStockFetcher, StockDatabase};
+use fetcher::{AsyncStockFetcher, StockData};
+use database::StockDatabase;
 use menu::{Menu, MenuAction};
 
 #[tokio::main]
@@ -211,7 +213,7 @@ async fn fetch_new_data(
     stock_codes: &[String],
     region_config: config::RegionConfig,
     info_indices: HashMap<String, config::InfoIndex>,
-) -> Result<Vec<stock::StockData>> {
+) -> Result<Vec<StockData>> {
     let timestamp = Local::now().format("%Y_%m_%d_%H_%M");
     println!("Fetching real-time data at {} ...", timestamp);
     

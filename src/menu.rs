@@ -22,6 +22,7 @@ pub struct MenuItem {
 pub enum MenuAction {
     Update,
     Show,
+    SetThresholds,
     Filter,
     Load,
     Exit,
@@ -45,6 +46,11 @@ impl Menu {
                 label: "Show Stock Info".to_string(),
                 description: "Display information for specific stock codes".to_string(),
                 action: MenuAction::Show,
+            },
+            MenuItem {
+                label: "Set Thresholds".to_string(),
+                description: "Configure filtering thresholds interactively".to_string(),
+                action: MenuAction::SetThresholds,
             },
             MenuItem {
                 label: "Filter Stocks".to_string(),

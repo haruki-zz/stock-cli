@@ -94,7 +94,8 @@ async fn run_interactive_mode() -> Result<()> {
                 wait_for_key();
             }
             MenuAction::Filter => {
-                println!("Filtering stocks with default thresholds...");
+                println!("Filtering stocks with thresholds (valid only):");
+                display_thresholds(&thresholds);
                 let filtered_codes = database.filter_stocks(&thresholds);
                 if filtered_codes.is_empty() {
                     println!("No stocks match the filtering criteria.");
@@ -161,6 +162,36 @@ fn wait_for_key() {
     println!("\nPress Enter to continue...");
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input);
+}
+
+fn display_thresholds(thresholds: &std::collections::HashMap<String, config::Threshold>) {
+    use unicode_width::UnicodeWidthStr;
+    if thresholds.is_empty() {
+        println!("  (no thresholds)");
+        return;
+    }
+
+    let mut items: Vec<_> = thresholds
+        .iter()
+        .filter(|(_, t)| t.valid)
+        .map(|(k, t)| (k.as_str(), t.lower, t.upper))
+        .collect();
+    items.sort_by(|a, b| a.0.cmp(b.0));
+
+    let name_width = items
+        .iter()
+        .map(|(k, _, _)| UnicodeWidthStr::width(*k))
+        .max()
+        .unwrap_or(4)
+        .max("Metric".len());
+
+    let header = format!("{:<name_w$} | Lower  | Upper  ", "Metric", name_w = name_width);
+    println!("{}", header);
+    println!("{}", "-".repeat(header.len()));
+    for (k, lo, up) in items {
+        println!("{:<name_w$} | {:>6.2} | {:>6.2}", k, lo, up, name_w = name_width);
+    }
+    println!();
 }
 
 fn read_line_trimmed() -> anyhow::Result<String> {

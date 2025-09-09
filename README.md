@@ -12,20 +12,6 @@ A high-performance CLI application for fetching and analyzing Chinese A-share st
 - **Unicode Support**: Proper handling of Chinese characters in stock names
 - **Error Handling**: Robust error handling with retry mechanisms
 
-## Code Structure
-
-- `src/fetcher.rs`
-  - `StockData`: Unified struct for a single stock snapshot.
-  - `AsyncStockFetcher`: Handles concurrent HTTP requests, retries, headers, and JSON parsing.
-- `src/database.rs`
-  - `StockDatabase`: In‑memory store with display, filtering, CSV save/load, and update timestamping.
-- `src/menu.rs`
-  - Interactive terminal UI with arrow‑key navigation and a clean banner.
-- `src/config.rs`
-  - Loads `config.json`, exposes region configs, info indices, and thresholds.
-- `src/main.rs`
-  - Wires everything together: loads config + codes, loads or fetches data, runs the interactive loop.
-
 ## Installation
 
 ### Option 1: Build from Source
@@ -65,7 +51,7 @@ cp target/release/stock-cli /usr/local/bin/
 cp config.json /usr/local/bin/  # Required
 
 # Now works from any directory
-stock-cli interactive
+stock-cli
 ```
 
 ## Configuration

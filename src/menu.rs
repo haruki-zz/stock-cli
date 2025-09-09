@@ -1,11 +1,11 @@
 use anyhow::Result;
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     style::{Attribute, Print, SetAttribute},
     terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
+use crate::ui::navigate_list;
 use std::io::{stdout, Write};
 use unicode_width::UnicodeWidthStr;
 
@@ -206,57 +206,7 @@ impl Menu {
         stdout.flush()?;
         Ok(())
     }
-
-    /// Move selection up with wrapping
-    fn move_selection_up(&mut self) {
-        self.selected_index = (self.selected_index + self.items.len() - 1) % self.items.len();
-    }
-
-    /// Move selection down with wrapping
-    fn move_selection_down(&mut self) {
-        self.selected_index = (self.selected_index + 1) % self.items.len();
-    }
-
-    /// Move selection to the first item
-    fn move_to_first(&mut self) {
-        self.selected_index = 0;
-    }
-
-    /// Move selection to the last item
-    fn move_to_last(&mut self) {
-        self.selected_index = self.items.len() - 1;
-    }
-
-    /// Handle keyboard input and update selection accordingly
-    fn handle_key_input(&mut self, code: KeyCode, modifiers: KeyModifiers) -> Option<MenuAction> {
-        match code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.move_selection_up();
-                None
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.move_selection_down();
-                None
-            }
-            KeyCode::Home => {
-                self.move_to_first();
-                None
-            }
-            KeyCode::End => {
-                self.move_to_last();
-                None
-            }
-            KeyCode::Enter | KeyCode::Char('\r') | KeyCode::Char('\n') => {
-                Some(self.items[self.selected_index].action.clone())
-            }
-            KeyCode::Esc => Some(MenuAction::Exit),
-            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(MenuAction::Exit)
-            }
-            _ => None,
-        }
-    }
-
+ 
     /// Initialize terminal for interactive navigation
     fn initialize_terminal(&self) -> Result<()> {
         let mut stdout = stdout();
@@ -278,32 +228,18 @@ impl Menu {
     pub fn navigate(&mut self) -> Result<MenuAction> {
         self.initialize_terminal()?;
 
-        self.show_banner()?;
-        self.display()?;
-
-        let result = loop {
-            match event::read()? {
-                Event::Key(KeyEvent { code, modifiers, kind, .. }) => {
-                    // Ignore key release events
-                    if matches!(kind, event::KeyEventKind::Release) {
-                        continue;
-                    }
-                    
-                    if let Some(action) = self.handle_key_input(code, modifiers) {
-                        break action;
-                    }
-                    
-                    // Redraw menu after navigation input
-                    if matches!(code, KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') | KeyCode::Home | KeyCode::End) {
-                        self.display()?;
-                    }
-                }
-                Event::Resize(_, _) => {
-                    self.show_banner()?;
-                    self.display()?;
-                }
-                _ => {} // Ignore other events
-            }
+        // Use shared navigator for selection; we manage drawing via closure
+        let total = self.items.len();
+        let initial = self.selected_index;
+        let render = |sel: usize| -> anyhow::Result<()> {
+            self.selected_index = sel;
+            self.show_banner()?;
+            self.display()?;
+            Ok(())
+        };
+        let result = match navigate_list(initial, || total, render)? {
+            Some(sel) => self.items[sel].action.clone(),
+            None => MenuAction::Exit,
         };
 
         self.cleanup_terminal()?;

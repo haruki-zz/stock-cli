@@ -10,6 +10,7 @@ use crate::database::StockDatabase;
 use crate::fetcher::{AsyncStockFetcher, StockData};
 use crate::menu::{Menu, MenuAction};
 use crate::threshold_menu::{display_thresholds, set_thresholds_interactively};
+use crossterm::{cursor, terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand, QueueableCommand};
 
 pub async fn run() -> Result<()> {
     let config_path = "config.json";
@@ -48,13 +49,39 @@ pub async fn run() -> Result<()> {
     )
     .await?;
 
-    // Main interactive loop
+    // Enter shared alternate screen + raw mode once
+    {
+        let mut out = std::io::stdout();
+        out.execute(EnterAlternateScreen)?;
+        terminal::enable_raw_mode()?;
+    }
+
+    // Render main menu at top (full-screen clear once)
+    let mut menu = Menu::new();
+    render_main_menu_full(&mut menu)?;
+
+    // Compute subcontent top row (below menu)
+    let sub_top: u16 = {
+        let menu_rows = menu.items.len() as u16;
+        // banner: BANNER_HEIGHT (10) + gap (1); menu starts at 11, so sub_top after menu + one blank line
+        10 + 1 + menu_rows + 2
+    };
+
+    // Main interactive loop sharing the same screen
     loop {
-        let mut menu = Menu::new();
-        let action = menu.navigate()?;
+        // Ensure raw mode is enabled before capturing navigation input
+        let _ = terminal::enable_raw_mode();
+        let action = menu.choose_action()?;
 
         match action {
             MenuAction::Update => {
+                // Clear sub area and run update
+                {
+                    let mut out = std::io::stdout();
+                    out.queue(cursor::MoveTo(0, sub_top))?;
+                    out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+                    out.flush()?;
+                }
                 println!("Fetching new data...");
                 match fetch_new_data(
                     raw_data_dir,
@@ -66,43 +93,71 @@ pub async fn run() -> Result<()> {
                 {
                     Ok(new_data) => {
                         database.update(new_data);
-                        println!("Stock information updated successfully.");
+                        let succeeded = database.data.len();
+                        let total = stock_codes.len();
+                        let failed = total.saturating_sub(succeeded);
+                        println!(
+                            "Stock information updated successfully.\nSucceeded: {}  Failed: {} (Total: {})",
+                            succeeded, failed, total
+                        );
                     }
                     Err(e) => {
                         println!("Failed to update stock information: {}", e);
                     }
                 }
-                wait_for_key();
+                pause_and_return(sub_top, &mut menu)?;
             }
             MenuAction::Show => {
+                // Disable raw to accept line input, then re-enable
+                terminal::disable_raw_mode()?;
                 let codes = get_stock_codes_input()?;
+                terminal::enable_raw_mode()?;
+                let mut out = std::io::stdout();
+                out.queue(cursor::MoveTo(0, sub_top))?;
+                out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+                out.flush()?;
                 if !codes.is_empty() {
                     database.show_stock_info(&codes);
                 } else {
                     println!("No stock codes entered.");
                 }
-                wait_for_key();
+                pause_and_return(sub_top, &mut menu)?;
             }
             MenuAction::SetThresholds => {
-                if let Err(e) = set_thresholds_interactively(&mut thresholds) {
+                if let Err(e) = set_thresholds_interactively(&mut thresholds, sub_top) {
                     println!("Failed to set thresholds: {}", e);
                 }
-                wait_for_key();
+                // Clear entire screen so only main menu remains in control
+                render_main_menu_full(&mut menu)?;
             }
             MenuAction::Filter => {
-                println!("Filtering stocks with thresholds (valid only):");
+                let mut out = std::io::stdout();
+                out.queue(cursor::MoveTo(0, sub_top))?;
+                out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+                out.flush()?;
+                use std::io::Write;
+                write!(out, "Filtering stocks with thresholds (valid only):\r\n")?;
+                out.flush()?;
                 display_thresholds(&thresholds);
                 let filtered_codes = database.filter_stocks(&thresholds);
                 if filtered_codes.is_empty() {
-                    println!("No stocks match the filtering criteria.");
+                    write!(out, "No stocks match the filtering criteria.\r\n")?;
+                    out.flush()?;
                 } else {
-                    println!("Filtering results:");
+                    write!(out, "Filtering results:\r\n")?;
+                    out.flush()?;
                     database.show_stock_info(&filtered_codes);
                 }
-                wait_for_key();
+                pause_and_return(sub_top, &mut menu)?;
             }
             MenuAction::Load => {
+                terminal::disable_raw_mode()?;
                 let filename = get_filename_input()?;
+                terminal::enable_raw_mode()?;
+                let mut out = std::io::stdout();
+                out.queue(cursor::MoveTo(0, sub_top))?;
+                out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+                out.flush()?;
                 if !filename.is_empty() {
                     match StockDatabase::load_from_csv(&filename) {
                         Ok(loaded_db) => {
@@ -116,13 +171,20 @@ pub async fn run() -> Result<()> {
                 } else {
                     println!("No filename entered.");
                 }
-                wait_for_key();
+                pause_and_return(sub_top, &mut menu)?;
             }
             MenuAction::Exit => {
                 println!("Exiting...");
                 break;
             }
         }
+    }
+
+    // Cleanup screen
+    {
+        let mut out = std::io::stdout();
+        let _ = terminal::disable_raw_mode();
+        let _ = out.execute(LeaveAlternateScreen);
     }
 
     Ok(())
@@ -150,10 +212,36 @@ fn get_filename_input() -> Result<String> {
     Ok(input.trim().to_string())
 }
 
-fn wait_for_key() {
-    println!("\nPress Enter to continue...");
+fn clear_sub_area(sub_top: u16) -> Result<()> {
+    let mut out = std::io::stdout();
+    out.queue(cursor::MoveTo(0, sub_top))?;
+    out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+    out.flush()?;
+    Ok(())
+}
+
+fn pause_and_return(_sub_top: u16, menu: &mut Menu) -> Result<()> {
+    // Temporarily disable raw, show prompt, wait for Enter, re-enable
+    terminal::disable_raw_mode()?;
+    print!("\nPress Enter to return...");
+    io::stdout().flush()?;
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input);
+    terminal::enable_raw_mode()?;
+
+    // Clear the whole screen and redraw only the main menu
+    render_main_menu_full(menu)?;
+    Ok(())
+}
+
+fn render_main_menu_full(menu: &mut Menu) -> Result<()> {
+    let mut out = std::io::stdout();
+    out.queue(cursor::MoveTo(0, 0))?;
+    out.queue(terminal::Clear(ClearType::All))?;
+    out.flush()?;
+    menu.show_banner()?;
+    menu.display()?;
+    Ok(())
 }
 
 async fn load_or_fetch_data(
@@ -297,4 +385,3 @@ fn load_stock_codes(file_path: &str) -> Result<Vec<String>> {
 
     Ok(codes)
 }
-

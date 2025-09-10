@@ -6,8 +6,11 @@ use crate::ui::navigate_list;
 
 pub fn display_thresholds(thresholds: &HashMap<String, Threshold>) {
     use unicode_width::UnicodeWidthStr;
+    use std::io::{self, Write};
+    let mut out = io::stdout();
     if thresholds.is_empty() {
-        println!("  (no thresholds)");
+        let _ = write!(out, "  (no thresholds)\r\n");
+        let _ = out.flush();
         return;
     }
 
@@ -26,16 +29,18 @@ pub fn display_thresholds(thresholds: &HashMap<String, Threshold>) {
         .max("Metric".len());
 
     let header = format!("{:<name_w$} | Lower  | Upper  ", "Metric", name_w = name_width);
-    println!("{}", header);
-    println!("{}", "-".repeat(header.len()));
+    let _ = write!(out, "{}\r\n", header);
+    let _ = write!(out, "{}\r\n", "-".repeat(header.len()));
     for (k, lo, up) in items {
-        println!("{:<name_w$} | {:>6.2} | {:>6.2}", k, lo, up, name_w = name_width);
+        let _ = write!(out, "{:<name_w$} | {:>6.2} | {:>6.2}\r\n", k, lo, up, name_w = name_width);
     }
-    println!();
+    let _ = write!(out, "\r\n");
+    let _ = out.flush();
 }
 
 pub fn set_thresholds_interactively(
     thresholds: &mut HashMap<String, Threshold>,
+    top_row: u16,
 ) -> Result<()> {
     use crossterm::{
         style::{Attribute, SetAttribute},
@@ -45,7 +50,7 @@ pub fn set_thresholds_interactively(
     use std::io::{stdout, Write};
 
     let mut stdout = stdout();
-    terminal::enable_raw_mode()?;
+    // Raw mode is expected to be enabled by caller (shared screen)
 
     let mut keys: Vec<String> = thresholds.keys().cloned().collect();
     keys.sort();
@@ -54,7 +59,8 @@ pub fn set_thresholds_interactively(
     loop {
         // Build a renderer that draws current list and options
         let render = |sel: usize| -> Result<()> {
-            stdout.queue(terminal::Clear(ClearType::All))?;
+            stdout.queue(crossterm::cursor::MoveTo(0, top_row))?;
+            stdout.queue(terminal::Clear(ClearType::FromCursorDown))?;
             stdout.write_all(b"Set Thresholds (Use Up/Down, Enter to edit, Esc to exit)\r\n\r\n")?;
 
             for (i, k) in keys.iter().enumerate() {
@@ -130,7 +136,7 @@ pub fn set_thresholds_interactively(
         }
     }
 
-    terminal::disable_raw_mode()?;
+    // Do not disable raw mode here; caller manages raw state
     Ok(())
 }
 

@@ -59,6 +59,8 @@ impl StockDatabase {
 
     fn display_table(&self, stocks: &[&StockData]) {
         use unicode_width::UnicodeWidthStr;
+        use std::io::{self, Write};
+        let mut out = io::stdout();
 
         let headers = vec![
             "Stock Name", "Stock Code", "Current", "Prev Closed", "Open", "Increase",
@@ -109,7 +111,7 @@ impl StockDatabase {
                 .join("+")
         );
 
-        println!("{}", border);
+        let _ = write!(out, "{}\r\n", border);
 
         for (row_idx, row) in all_rows.iter().enumerate() {
             let formatted_row = row
@@ -123,14 +125,15 @@ impl StockDatabase {
                 .collect::<Vec<_>>()
                 .join("|");
 
-            println!("|{}|", formatted_row);
+            let _ = write!(out, "|{}|\r\n", formatted_row);
 
             if row_idx == 0 {
-                println!("{}", border);
+                let _ = write!(out, "{}\r\n", border);
             }
         }
 
-        println!("{}", border);
+        let _ = write!(out, "{}\r\n", border);
+        let _ = out.flush();
     }
 
     pub fn save_to_csv(&self, file_path: &str) -> Result<()> {
@@ -189,4 +192,3 @@ impl StockDatabase {
         Ok(Self::new(data))
     }
 }
-

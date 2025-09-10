@@ -106,13 +106,12 @@ impl Menu {
     pub fn show_banner(&self) -> Result<()> {
         let (cols, _) = terminal::size().unwrap_or((80, 24));
         let mut stdout = stdout();
-        
-        // Clear screen and hide cursor
-        stdout.queue(terminal::Clear(ClearType::All))?;
+
+        // Hide cursor (do not clear whole screen so subcontent remains)
         stdout.queue(cursor::Hide)?;
 
         let border_line = Self::create_border_line(cols);
-        
+
         let banner_lines = [
             &border_line,
             "# Stock Information Fetcher (Rust Edition)",
@@ -129,11 +128,29 @@ impl Menu {
         // Queue all banner lines for batch processing
         for (row, line) in banner_lines.iter().enumerate() {
             stdout.queue(cursor::MoveTo(0, row as u16))?;
+            stdout.queue(terminal::Clear(ClearType::CurrentLine))?;
             stdout.queue(Print(line))?;
         }
        
         stdout.flush()?;
         Ok(())
+    }
+
+    /// Choose an action using shared screen (no terminal init/cleanup)
+    pub fn choose_action(&mut self) -> Result<MenuAction> {
+        let total = self.items.len();
+        let initial = self.selected_index;
+        let render = |sel: usize| -> anyhow::Result<()> {
+            self.selected_index = sel;
+            self.show_banner()?;
+            self.display()?;
+            Ok(())
+        };
+        let result = match navigate_list(initial, || total, render)? {
+            Some(sel) => self.items[sel].action.clone(),
+            None => MenuAction::Exit,
+        };
+        Ok(result)
     }
 
     /// Render a single menu item with proper formatting and highlighting
@@ -261,4 +278,3 @@ impl Default for Menu {
         Self::new()
     }
 }
-

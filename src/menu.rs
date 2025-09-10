@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::{
     cursor,
     style::{Attribute, Print, SetAttribute},
-    terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{self, ClearType, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
 use crate::ui::navigate_list;
@@ -222,45 +222,6 @@ impl Menu {
 
         stdout.flush()?;
         Ok(())
-    }
- 
-    /// Initialize terminal for interactive navigation
-    fn initialize_terminal(&self) -> Result<()> {
-        let mut stdout = stdout();
-        stdout.execute(EnterAlternateScreen)?;
-        terminal::enable_raw_mode()?;
-        Ok(())
-    }
-
-    /// Cleanup terminal after navigation
-    fn cleanup_terminal(&self) -> Result<()> {
-        terminal::disable_raw_mode()?;
-        let mut stdout = stdout();
-        stdout.execute(LeaveAlternateScreen)?;
-        stdout.execute(cursor::Show)?;
-        Ok(())
-    }
-
-    /// Main navigation loop with keyboard input handling
-    pub fn navigate(&mut self) -> Result<MenuAction> {
-        self.initialize_terminal()?;
-
-        // Use shared navigator for selection; we manage drawing via closure
-        let total = self.items.len();
-        let initial = self.selected_index;
-        let render = |sel: usize| -> anyhow::Result<()> {
-            self.selected_index = sel;
-            self.show_banner()?;
-            self.display()?;
-            Ok(())
-        };
-        let result = match navigate_list(initial, || total, render)? {
-            Some(sel) => self.items[sel].action.clone(),
-            None => MenuAction::Exit,
-        };
-
-        self.cleanup_terminal()?;
-        Ok(result)
     }
 }
 

@@ -212,14 +212,6 @@ fn get_filename_input() -> Result<String> {
     Ok(input.trim().to_string())
 }
 
-fn clear_sub_area(sub_top: u16) -> Result<()> {
-    let mut out = std::io::stdout();
-    out.queue(cursor::MoveTo(0, sub_top))?;
-    out.queue(terminal::Clear(ClearType::FromCursorDown))?;
-    out.flush()?;
-    Ok(())
-}
-
 fn pause_and_return(_sub_top: u16, menu: &mut Menu) -> Result<()> {
     // Temporarily disable raw, show prompt, wait for Enter, re-enable
     terminal::disable_raw_mode()?;

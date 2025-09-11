@@ -31,39 +31,46 @@ pub enum MenuAction {
 pub struct Menu {
     pub items: Vec<MenuItem>,
     pub selected_index: usize,
+    pub loaded_file: Option<String>,
 }
 
 impl Menu {
     /// Creates a new menu with default stock application options
     pub fn new() -> Self {
         let items = vec![
-            MenuItem {
-                label: "Update Stock Data".to_string(),
-                description: "Fetch fresh stock information from API".to_string(),
-                action: MenuAction::Update,
-            },
-            MenuItem {
-                label: "Show Stock Info".to_string(),
-                description: "Display information for specific stock codes".to_string(),
-                action: MenuAction::Show,
-            },
-            MenuItem {
-                label: "Set Thresholds".to_string(),
-                description: "Configure filtering thresholds interactively".to_string(),
-                action: MenuAction::SetThresholds,
-            },
+            // 1) Filter stocks
             MenuItem {
                 label: "Filter Stocks".to_string(),
-                description: "Show stocks matching default thresholds".to_string(),
+                description: "List stocks that meet the current thresholds".to_string(),
                 action: MenuAction::Filter,
             },
+            // 2) Set thresholds
             MenuItem {
-                label: "Load from File".to_string(),
-                description: "Load stock data from CSV file".to_string(),
+                label: "Edit Thresholds".to_string(),
+                description: "Change the numeric ranges used for filtering".to_string(),
+                action: MenuAction::SetThresholds,
+            },
+            // 3) Update stock info
+            MenuItem {
+                label: "Refresh Data".to_string(),
+                description: "Fetch latest stock data from the API and save".to_string(),
+                action: MenuAction::Update,
+            },
+            // 4) Show stock info
+            MenuItem {
+                label: "View Stocks".to_string(),
+                description: "Display info for stock codes you enter".to_string(),
+                action: MenuAction::Show,
+            },
+            // 5) Load from file
+            MenuItem {
+                label: "Load CSV".to_string(),
+                description: "Load previously saved stock data from a CSV file".to_string(),
                 action: MenuAction::Load,
             },
+            // 6) Exit
             MenuItem {
-                label: "Exit".to_string(),
+                label: "Quit".to_string(),
                 description: "Exit the application".to_string(),
                 action: MenuAction::Exit,
             },
@@ -72,6 +79,7 @@ impl Menu {
         Self {
             items,
             selected_index: 0,
+            loaded_file: None,
         }
     }
 
@@ -112,13 +120,14 @@ impl Menu {
 
         let border_line = Self::create_border_line(cols);
 
+        let loaded = self.loaded_file.as_deref().unwrap_or("None");
         let banner_lines = [
             &border_line,
             "# Stock Information Fetcher (Rust Edition)",
             "# Author: haruki-zhang", 
             "# FOR PERSONAL USE ONLY",
             "#",
-            "# Project created on: 2024/10/02",
+            &format!("# Loaded data file: {}", loaded),
             &format!("# Executing date: {}", chrono::Local::now().format("%Y-%m-%d %H:%M")),
             "#",
             "# Use ↑/↓ arrows to navigate, Enter to select, Esc/Ctrl+C to exit",

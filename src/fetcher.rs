@@ -78,7 +78,12 @@ impl AsyncStockFetcher {
             .collect()
             .await;
 
-        println!(); // New line after progress
+        {
+            // Ensure cursor returns to column 0 after progress line
+            use std::io::{self, Write};
+            print!("\r\n");
+            io::stdout().flush().unwrap();
+        }
 
         let valid_results: Vec<StockData> = results.into_iter().flatten().collect();
 
@@ -205,4 +210,3 @@ impl AsyncStockFetcher {
         })
     }
 }
-

@@ -51,10 +51,14 @@ impl StockDatabase {
     pub fn update(&mut self, new_data: Vec<StockData>) {
         self.data = new_data;
         let now: DateTime<Local> = Local::now();
-        println!(
-            "Stock information is updated on {}.",
+        use std::io::{self, Write};
+        let mut out = io::stdout();
+        let _ = write!(
+            out,
+            "Stock information is updated on {}.\r\n",
             now.format("%Y-%m-%d %H:%M")
         );
+        let _ = out.flush();
     }
 
     fn display_table(&self, stocks: &[&StockData]) {

@@ -40,14 +40,8 @@ pub async fn run() -> Result<()> {
         fs::create_dir_all(raw_data_dir).context("Failed to create raw_data directory")?;
     }
 
-    // Check for existing data
-    let mut database = load_or_fetch_data(
-        raw_data_dir,
-        &stock_codes,
-        region_config.clone(),
-        info_indices.clone(),
-    )
-    .await?;
+    // Prepare database; load later based on user choice
+    let mut database = StockDatabase::new(Vec::new());
 
     // Enter shared alternate screen + raw mode once
     {
@@ -67,6 +61,48 @@ pub async fn run() -> Result<()> {
         10 + 1 + menu_rows + 2
     };
 
+    // Initial previous-data prompt shown below the main menu
+    if let Some((latest_path, latest_name)) = find_latest_csv(raw_data_dir) {
+        let mut out = std::io::stdout();
+        out.queue(cursor::MoveTo(0, sub_top))?;
+        out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+        use std::io::Write;
+        write!(
+            out,
+            "Previous data detected. Load data from latest file {}? (y/n): \r\n",
+            latest_name
+        )?;
+        out.flush()?;
+
+        // Temporarily disable raw to read input
+        terminal::disable_raw_mode()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        terminal::enable_raw_mode()?;
+        let choice = input.trim().to_lowercase();
+
+        out.queue(cursor::MoveTo(0, sub_top))?;
+        out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+        if choice == "y" {
+            match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
+                Ok(db) => {
+                    database = db;
+                    menu.loaded_file = Some(latest_name.clone());
+                    write!(out, "Data loaded from {}\r\n", latest_name)?;
+                }
+                Err(e) => {
+                    write!(out, "Failed to load data: {}\r\n", e)?;
+                }
+            }
+        } else {
+            write!(out, "Skipping loading previous data.\r\n")?;
+        }
+        out.flush()?;
+
+        // Redraw clean main menu
+        render_main_menu_full(&mut menu)?;
+    }
+
     // Main interactive loop sharing the same screen
     loop {
         // Ensure raw mode is enabled before capturing navigation input
@@ -82,7 +118,12 @@ pub async fn run() -> Result<()> {
                     out.queue(terminal::Clear(ClearType::FromCursorDown))?;
                     out.flush()?;
                 }
-                println!("Fetching new data...");
+                {
+                    use std::io::Write;
+                    let mut out = std::io::stdout();
+                    write!(out, "Fetching new data...\r\n")?;
+                    out.flush()?;
+                }
                 match fetch_new_data(
                     raw_data_dir,
                     &stock_codes,
@@ -91,18 +132,25 @@ pub async fn run() -> Result<()> {
                 )
                 .await
                 {
-                    Ok(new_data) => {
+                    Ok((new_data, saved_file)) => {
                         database.update(new_data);
+                        menu.loaded_file = Some(saved_file);
                         let succeeded = database.data.len();
                         let total = stock_codes.len();
                         let failed = total.saturating_sub(succeeded);
-                        println!(
-                            "Stock information updated successfully.\nSucceeded: {}  Failed: {} (Total: {})",
-                            succeeded, failed, total
-                        );
+                        {
+                            use std::io::Write;
+                            let mut out = std::io::stdout();
+                            write!(out, "Stock information updated successfully.\r\n")?;
+                            write!(out, "Succeeded: {}  Failed: {} (Total: {})\r\n", succeeded, failed, total)?;
+                            out.flush()?;
+                        }
                     }
                     Err(e) => {
-                        println!("Failed to update stock information: {}", e);
+                        use std::io::Write;
+                        let mut out = std::io::stdout();
+                        write!(out, "Failed to update stock information: {}\r\n", e)?;
+                        out.flush()?;
                     }
                 }
                 pause_and_return(sub_top, &mut menu)?;
@@ -119,7 +167,10 @@ pub async fn run() -> Result<()> {
                 if !codes.is_empty() {
                     database.show_stock_info(&codes);
                 } else {
-                    println!("No stock codes entered.");
+                    use std::io::Write;
+                    let mut out = std::io::stdout();
+                    write!(out, "No stock codes entered.\r\n")?;
+                    out.flush()?;
                 }
                 pause_and_return(sub_top, &mut menu)?;
             }
@@ -162,14 +213,24 @@ pub async fn run() -> Result<()> {
                     match StockDatabase::load_from_csv(&filename) {
                         Ok(loaded_db) => {
                             database = loaded_db;
-                            println!("Data loaded from {}", filename);
+                            menu.loaded_file = Some(filename.clone());
+                            use std::io::Write;
+                            let mut out = std::io::stdout();
+                            write!(out, "Data loaded from {}\r\n", filename)?;
+                            out.flush()?;
                         }
                         Err(e) => {
-                            println!("Failed to load data from {}: {}", filename, e);
+                            use std::io::Write;
+                            let mut out = std::io::stdout();
+                            write!(out, "Failed to load data from {}: {}\r\n", filename, e)?;
+                            out.flush()?;
                         }
                     }
                 } else {
-                    println!("No filename entered.");
+                    use std::io::Write;
+                    let mut out = std::io::stdout();
+                    write!(out, "No filename entered.\r\n")?;
+                    out.flush()?;
                 }
                 pause_and_return(sub_top, &mut menu)?;
             }
@@ -236,70 +297,15 @@ fn render_main_menu_full(menu: &mut Menu) -> Result<()> {
     Ok(())
 }
 
-async fn load_or_fetch_data(
-    raw_data_dir: &str,
-    stock_codes: &[String],
-    region_config: config::RegionConfig,
-    info_indices: HashMap<String, config::InfoIndex>,
-) -> Result<StockDatabase> {
-    let data_files: Vec<_> = fs::read_dir(raw_data_dir)?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| ext == "csv")
-                .unwrap_or(false)
-        })
-        .collect();
-
-    if data_files.is_empty() {
-        println!("No previous data detected. Fetching new data...");
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        let data = fetch_new_data(raw_data_dir, stock_codes, region_config, info_indices).await?;
-        Ok(StockDatabase::new(data))
-    } else {
-        let latest_file = data_files
-            .into_iter()
-            .max_by_key(|entry| entry.metadata().unwrap().modified().unwrap())
-            .unwrap();
-
-        let latest_file_name = latest_file.file_name();
-        let latest_file_name_str = latest_file_name.to_string_lossy();
-
-        print!(
-            "Previous data detected. Load data from latest file {}? (y/n): ",
-            latest_file_name_str
-        );
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let input = input.trim().to_lowercase();
-
-        if input == "y" {
-            println!("Data loaded from {}.", latest_file_name_str);
-            let file_path = latest_file.path();
-            StockDatabase::load_from_csv(file_path.to_str().unwrap())
-                .context("Failed to load existing data")
-        } else {
-            println!("Fetching new data...");
-            let data = fetch_new_data(raw_data_dir, stock_codes, region_config, info_indices).await?;
-            Ok(StockDatabase::new(data))
-        }
-    }
-}
+// (legacy) load_or_fetch_data removed; initialization flow now prompts below the main menu.
 
 async fn fetch_new_data(
     raw_data_dir: &str,
     stock_codes: &[String],
     region_config: config::RegionConfig,
     info_indices: HashMap<String, config::InfoIndex>,
-) -> Result<Vec<StockData>> {
+) -> Result<(Vec<StockData>, String)> {
     let timestamp = Local::now().format("%Y_%m_%d_%H_%M");
-    println!("Fetching real-time data at {} ...", timestamp);
 
     let fetcher = AsyncStockFetcher::new(stock_codes.to_vec(), region_config, info_indices);
 
@@ -308,17 +314,34 @@ async fn fetch_new_data(
         .await
         .context("Failed to fetch stock data")?;
 
-    println!("Fetching complete. Saving data...");
-
     let database = StockDatabase::new(data.clone());
     let filename = format!("{}/{}_raw.csv", raw_data_dir, timestamp);
     database
         .save_to_csv(&filename)
         .context("Failed to save data to CSV")?;
 
-    println!("Data saved successfully to {}", filename);
+    Ok((data, filename))
+}
 
-    Ok(data)
+fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
+    let entries = fs::read_dir(dir).ok()?;
+    let mut latest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.extension().and_then(|s| s.to_str()) == Some("csv") {
+            if let Ok(meta) = e.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    if latest.as_ref().map(|(t, _)| &modified > t).unwrap_or(true) {
+                        latest = Some((modified, p));
+                    }
+                }
+            }
+        }
+    }
+    latest.map(|(_, p)| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        (p, name)
+    })
 }
 
 fn get_default_stock_codes() -> Vec<String> {

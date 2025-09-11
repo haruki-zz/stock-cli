@@ -76,19 +76,22 @@ The application starts in interactive mode with arrow key navigation:
 - **Enter**: Select the highlighted option
 - **Esc** or **Ctrl+C**: Exit the application
 
-**Available Options:**
-- **Update Stock Data**: Fetch fresh stock information from API
-- **Show Stock Info**: Display information for specific stock codes (you'll be prompted to enter codes)
-- **Set Thresholds**: Configure filtering thresholds interactively during runtime
-- **Filter Stocks**: Show stocks matching configured thresholds
-- **Load from File**: Load stock data from CSV file (you'll be prompted to enter filename)
-- **Exit**: Exit the application
+**Available Options (in order):**
+- **Filter Stocks**: List stocks that meet the current thresholds
+- **Edit Thresholds**: Change the numeric ranges used for filtering
+- **Refresh Data**: Fetch the latest stock data from the API and save
+- **View Stocks**: Display info for stock codes you enter
+- **Load CSV**: Load previously saved stock data from a CSV file
+- **Quit**: Exit the application
 
-The interface is designed similar to Claude CLI with a clean menu system and intuitive navigation.
+Startup behavior and layout:
+- The app opens in an alternate screen with the main menu fixed at the top.
+- The banner shows the currently loaded data file: “Loaded data file: <name or None>”.
+- Prompts and results render below the menu; press Enter to return to the menu.
 
-### Threshold Settings
+### Edit Thresholds
 
-- Open via: Menu → Set Thresholds.
+- Open via: Menu → Edit Thresholds.
 - Navigation: Up/Down arrows move the selection; selection wraps around from last to first.
 - Edit: Press Enter on a metric to change its lower/upper bounds; values are shown and entered as two decimals.
 - Add: Choose “Add new metric” to create a custom metric with bounds.

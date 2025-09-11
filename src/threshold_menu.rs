@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use crate::config::Threshold;
 use crate::ui::navigate_list;
+use crate::select::{render_select_list, SelectItem};
 
 pub fn display_thresholds(thresholds: &HashMap<String, Threshold>) {
     use unicode_width::UnicodeWidthStr;
@@ -59,37 +60,28 @@ pub fn set_thresholds_interactively(
     loop {
         // Build a renderer that draws current list and options
         let render = |sel: usize| -> Result<()> {
+            // Clear area
             stdout.queue(crossterm::cursor::MoveTo(0, top_row))?;
             stdout.queue(terminal::Clear(ClearType::FromCursorDown))?;
+
+            // Build items: metrics + Add + Done
+            let mut items: Vec<SelectItem> = keys
+                .iter()
+                .map(|k| {
+                    let thr = thresholds.get(k).unwrap();
+                    SelectItem {
+                        label: k.clone(),
+                        description: format!("[{:.2}, {:.2}]", thr.lower, thr.upper),
+                    }
+                })
+                .collect();
+            items.push(SelectItem { label: "Add new metric".to_string(), description: "Create a new threshold".to_string() });
+            items.push(SelectItem { label: "Done".to_string(), description: "Return to main menu".to_string() });
+
+            // Render list below the title line
             stdout.write_all(b"Set Thresholds (Use Up/Down, Enter to edit, Esc to exit)\r\n\r\n")?;
-
-            for (i, k) in keys.iter().enumerate() {
-                let thr = thresholds.get(k).unwrap();
-                let is_sel = i == sel;
-                stdout.write_all(if is_sel { "► ".as_bytes() } else { "  ".as_bytes() })?;
-                if is_sel { stdout.queue(SetAttribute(Attribute::Reverse))?; }
-                stdout.write_all(
-                    format!("{:<12} : [{:.2}, {:.2}]", k, thr.lower, thr.upper).as_bytes(),
-                )?;
-                if is_sel { stdout.queue(SetAttribute(Attribute::Reset))?; }
-                stdout.write_all("\r\n".as_bytes())?;
-            }
-
-            let is_add = sel == keys.len();
-            stdout.write_all(if is_add { "► ".as_bytes() } else { "  ".as_bytes() })?;
-            if is_add { stdout.queue(SetAttribute(Attribute::Reverse))?; }
-            stdout.write_all("Add new metric".as_bytes())?;
-            if is_add { stdout.queue(SetAttribute(Attribute::Reset))?; }
-            stdout.write_all("\r\n".as_bytes())?;
-
-            let is_done = sel == keys.len() + 1;
-            stdout.write_all(if is_done { "► ".as_bytes() } else { "  ".as_bytes() })?;
-            if is_done { stdout.queue(SetAttribute(Attribute::Reverse))?; }
-            stdout.write_all("Done".as_bytes())?;
-            if is_done { stdout.queue(SetAttribute(Attribute::Reset))?; }
-            stdout.write_all("\r\n".as_bytes())?;
-
-            stdout.flush()?;
+            let list_top = top_row + 2;
+            render_select_list(list_top, &items, sel)?;
             Ok(())
         };
 

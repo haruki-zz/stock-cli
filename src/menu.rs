@@ -8,6 +8,7 @@ use crossterm::{
 use crate::ui::navigate_list;
 use std::io::{stdout, Write};
 use unicode_width::UnicodeWidthStr;
+use crate::select::{render_select_list, SelectItem};
 
 const BANNER_HEIGHT: u16 = 10;
 const MENU_GAP: u16 = 1;
@@ -219,18 +220,12 @@ impl Menu {
 
     /// Display the menu items with proper formatting and highlighting
     pub fn display(&self) -> Result<()> {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
-        let mut stdout = stdout();
-
-        let max_label_width = self.max_label_width();
-        let terminal_cols = cols as usize;
-        
-        for (index, item) in self.items.iter().enumerate() {
-            self.render_menu_item(&mut stdout, index, item, max_label_width, terminal_cols)?;
-        }
-
-        stdout.flush()?;
-        Ok(())
+        let items: Vec<SelectItem> = self
+            .items
+            .iter()
+            .map(|m| SelectItem { label: m.label.clone(), description: m.description.clone() })
+            .collect();
+        render_select_list(Self::menu_top(), &items, self.selected_index)
     }
 }
 

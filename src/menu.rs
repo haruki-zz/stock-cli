@@ -1,13 +1,12 @@
 use anyhow::Result;
 use crossterm::{
     cursor,
-    style::{Attribute, Print, SetAttribute},
+    style::Print,
     terminal::{self, ClearType, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
 use crate::ui::navigate_list;
 use std::io::{stdout, Write};
-use unicode_width::UnicodeWidthStr;
 use crate::select::{render_select_list, SelectItem};
 
 const BANNER_HEIGHT: u16 = 10;
@@ -89,22 +88,6 @@ impl Menu {
         BANNER_HEIGHT + MENU_GAP
     }
 
-    /// Get the maximum display width of all menu item labels
-    fn max_label_width(&self) -> usize {
-        self.items
-            .iter()
-            .map(|item| UnicodeWidthStr::width(item.label.as_str()))
-            .max()
-            .unwrap_or(0)
-    }
-
-    /// Create a padded version of a label with Unicode-aware width calculation
-    fn pad_label(&self, label: &str, target_width: usize) -> String {
-        let current_width = UnicodeWidthStr::width(label);
-        let padding = target_width.saturating_sub(current_width);
-        format!("{}{}", label, " ".repeat(padding))
-    }
-
     /// Create the banner border line that adapts to terminal width
     fn create_border_line(terminal_width: u16) -> String {
         let inner_width = terminal_width.saturating_sub(4) as usize;
@@ -161,61 +144,6 @@ impl Menu {
             None => MenuAction::Exit,
         };
         Ok(result)
-    }
-
-    /// Render a single menu item with proper formatting and highlighting
-    fn render_menu_item(
-        &self,
-        stdout: &mut std::io::Stdout,
-        index: usize,
-        item: &MenuItem,
-        max_label_width: usize,
-        terminal_cols: usize,
-    ) -> Result<()> {
-        let y_position = Self::menu_top() + index as u16;
-        
-        stdout.queue(cursor::MoveTo(0, y_position))?;
-        stdout.queue(terminal::Clear(ClearType::CurrentLine))?;
-
-        let padded_label = self.pad_label(&item.label, max_label_width);
-        let is_selected = index == self.selected_index;
-        
-        let prefix = if is_selected { "► " } else { "  " };
-        let suffix = format!("   - {}", item.description);
-
-        stdout.queue(Print(prefix))?;
-
-        if is_selected {
-            stdout.queue(SetAttribute(Attribute::Reverse))?;
-        }
-        stdout.queue(Print(&padded_label))?;
-        if is_selected {
-            stdout.queue(SetAttribute(Attribute::Reset))?;
-        }
-
-        stdout.queue(Print(&suffix))?;
-
-        // Fill remaining space to prevent artifacts on terminal resize
-        self.fill_line_remainder(stdout, &format!("{prefix}{padded_label}{suffix}"), terminal_cols)?;
-        
-        Ok(())
-    }
-
-    /// Fill the remainder of a line with spaces to prevent display artifacts
-    fn fill_line_remainder(
-        &self,
-        stdout: &mut std::io::Stdout,
-        content: &str,
-        terminal_cols: usize,
-    ) -> Result<()> {
-        let used_width = UnicodeWidthStr::width(content);
-        let remaining_space = terminal_cols.saturating_sub(used_width);
-        
-        if remaining_space > 0 {
-            stdout.queue(Print(" ".repeat(remaining_space)))?;
-        }
-        
-        Ok(())
     }
 
     /// Display the menu items with proper formatting and highlighting

@@ -44,7 +44,6 @@ pub fn set_thresholds_interactively(
     top_row: u16,
 ) -> Result<()> {
     use crossterm::{
-        style::{Attribute, SetAttribute},
         terminal::{self, ClearType},
         QueueableCommand,
     };

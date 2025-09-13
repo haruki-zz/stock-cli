@@ -1,0 +1,15 @@
+# Ignore everything by default
+/*
+
+# Keep these at repo root
+!/.gitignore
+!/README.md
+!/Cargo.toml
+!/Cargo.lock
+!/config.json
+!/stock_code.csv
+
+# Keep Rust source files under src/
+!/src/
+!/src/**
+

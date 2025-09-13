@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types: [created, published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "v0.1.0"
+        required: false
+        default: "dev"
 
 jobs:
   build-and-release:
@@ -22,10 +30,17 @@ jobs:
         run: cargo build --release
 
       - name: Prepare artifacts
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euxo pipefail
           APP_NAME=stock-cli
+          # Determine tag name across different triggers
           TAG_NAME="${GITHUB_REF_NAME}"
+          if [ -z "${TAG_NAME}" ] || [ "${TAG_NAME}" = "" ]; then
+            TAG_NAME="${RELEASE_TAG:-${INPUT_TAG:-dev}}"
+          fi
           DIST_DIR=dist
           mkdir -p "$DIST_DIR"
           PKG_NAME="${APP_NAME}-macos-x86_64-${TAG_NAME}"
@@ -46,4 +61,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

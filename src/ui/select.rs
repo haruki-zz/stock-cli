@@ -53,3 +53,4 @@ pub fn render_select_list(top_row: u16, items: &[SelectItem], selected: usize) -
     out.flush()?;
     Ok(())
 }
+

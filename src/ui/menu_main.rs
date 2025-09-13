@@ -5,9 +5,9 @@ use crossterm::{
     terminal::{self, ClearType, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
-use crate::ui::navigate_list;
+use crate::ui::navigation::navigate_list;
 use std::io::{stdout, Write};
-use crate::select::{render_select_list, SelectItem};
+use crate::ui::select::{render_select_list, SelectItem};
 
 const BANNER_HEIGHT: u16 = 10;
 const MENU_GAP: u16 = 1;
@@ -40,32 +40,32 @@ impl Menu {
         let items = vec![
             // 1) Filter stocks
             MenuItem {
-                label: "Filter Stocks".to_string(),
-                description: "List stocks that meet the current thresholds".to_string(),
+                label: "Show Filtered".to_string(),
+                description: "List stocks that match current filters".to_string(),
                 action: MenuAction::Filter,
             },
             // 2) Set thresholds
             MenuItem {
-                label: "Edit Thresholds".to_string(),
-                description: "Change the numeric ranges used for filtering".to_string(),
+                label: "Set Filters".to_string(),
+                description: "Adjust threshold ranges for filtering".to_string(),
                 action: MenuAction::SetThresholds,
             },
             // 3) Update stock info
             MenuItem {
                 label: "Refresh Data".to_string(),
-                description: "Fetch latest stock data from the API and save".to_string(),
+                description: "Fetch latest data and save to CSV".to_string(),
                 action: MenuAction::Update,
             },
             // 4) Show stock info
             MenuItem {
                 label: "View Stocks".to_string(),
-                description: "Display info for stock codes you enter".to_string(),
+                description: "Enter codes to view details".to_string(),
                 action: MenuAction::Show,
             },
             // 5) Load from file
             MenuItem {
                 label: "Load CSV".to_string(),
-                description: "Load previously saved stock data from a CSV file".to_string(),
+                description: "Pick a saved CSV from raw_data/".to_string(),
                 action: MenuAction::Load,
             },
             // 6) Exit
@@ -107,14 +107,14 @@ impl Menu {
         let loaded = self.loaded_file.as_deref().unwrap_or("None");
         let banner_lines = [
             &border_line,
-            "# Stock Information Fetcher (Rust Edition)",
-            "# Author: haruki-zhang", 
-            "# FOR PERSONAL USE ONLY",
+            "# Stock CLI",
+            "# Author: haruki-zhang",
+            "# Personal use only",
             "#",
-            &format!("# Loaded data file: {}", loaded),
-            &format!("# Executing date: {}", chrono::Local::now().format("%Y-%m-%d %H:%M")),
+            &format!("# Data file: {}", loaded),
+            &format!("# Now: {}", chrono::Local::now().format("%Y-%m-%d %H:%M")),
             "#",
-            "# Use ↑/↓ arrows to navigate, Enter to select, Esc/Ctrl+C to exit",
+            "# ↑/↓ navigate • Enter select • Esc back • Ctrl+C exit",
             &border_line,
         ];
 

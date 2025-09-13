@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::config::Threshold;
-use crate::ui::navigate_list;
-use crate::select::{render_select_list, SelectItem};
+use crate::ui::navigation::navigate_list;
+use crate::ui::select::{render_select_list, SelectItem};
 
 pub fn display_thresholds(thresholds: &HashMap<String, Threshold>) {
     use unicode_width::UnicodeWidthStr;
@@ -63,7 +63,7 @@ pub fn set_thresholds_interactively(
             stdout.queue(crossterm::cursor::MoveTo(0, top_row))?;
             stdout.queue(terminal::Clear(ClearType::FromCursorDown))?;
 
-            // Build items: metrics + Add + Done
+            // Build items: metrics + Add + Back
             let mut items: Vec<SelectItem> = keys
                 .iter()
                 .map(|k| {
@@ -74,17 +74,17 @@ pub fn set_thresholds_interactively(
                     }
                 })
                 .collect();
-            items.push(SelectItem { label: "Add new metric".to_string(), description: "Create a new threshold".to_string() });
-            items.push(SelectItem { label: "Done".to_string(), description: "Return to main menu".to_string() });
+            items.push(SelectItem { label: "Add filter".to_string(), description: "Create a new threshold".to_string() });
+            items.push(SelectItem { label: "Back".to_string(), description: "Return to menu".to_string() });
 
             // Render list below the title line
-            stdout.write_all(b"Set Thresholds (Use Up/Down, Enter to edit, Esc to exit)\r\n\r\n")?;
+            stdout.write_all(b"Edit thresholds \xE2\x80\x94 \xE2\x86\x91/\xE2\x86\x93 navigate, Enter edit, Esc back\r\n\r\n")?;
             let list_top = top_row + 2;
             render_select_list(list_top, &items, sel)?;
             Ok(())
         };
 
-        let total = || keys.len() + 2; // include Add and Done
+        let total = || keys.len() + 2; // include Add and Back
         match navigate_list(selected, total, render)? {
             None => break,        // Esc
             Some(sel) => {
@@ -119,7 +119,7 @@ pub fn set_thresholds_interactively(
                         let _ = read_line_trimmed();
                     }
                 } else {
-                    // Done
+                    // Back
                     break;
                 }
                 terminal::enable_raw_mode()?;

@@ -27,25 +27,32 @@ Notes
 Start the app
 - `stock-cli` (or `cargo run` during development)
 
-Navigation
-- ↑/↓ navigate • Enter select • Esc back • Ctrl+C exit
+Global navigation
+- ↑/↓ or j/k: move selection
+- Enter: select / confirm • Esc: back • Ctrl+C: exit
 
 Menu actions
 - Show Filtered — List stocks matching current filters
+  - Table paging: ↓/j and ↑/k scroll; PageDown/PageUp for page; Home/End to jump; Enter/Esc back
 - Set Filters — Adjust threshold ranges used for filtering
-- Refresh Data — Fetch latest data and save to CSV under `raw_data/`
-- View Stocks — Enter space-separated codes to view details
-- Load CSV — Pick an existing CSV from `raw_data/` and load it
+  - Third-level editor (inline modal):
+    - Tab/↑/↓/j/k: switch between Lower and Upper
+    - Type numbers (digits/./-), Backspace to edit, Enter to save, Esc to cancel
+    - Values display with two decimals
+- Refresh Data — Fetch latest data and save to `raw_data/`
+  - Progress screen shows “Please wait…” and a textual percentage; Enter to continue when done
+- View Stocks — Enter space-separated codes to view details (simple output)
+- Load CSV — Pick a CSV from `raw_data/` using the same keys (↑/↓/j/k, Enter/Esc)
 - Quit — Exit
 
 Tips
-- On startup, if a recent CSV exists, you can load it with a single keypress.
+- On startup, if a recent CSV exists and you skip loading it, the app automatically fetches fresh data.
 - After each action, press Enter to return to the main menu.
 
 ## Features
 
 - Async fetching with progress and error handling (Tokio + anyhow)
-- Menu-driven TUI with clear, consistent key bindings
+- Ratatui-powered TUI with clear, consistent key bindings
 - CSV persistence with timestamped filenames under `raw_data/`
 - Powerful filtering by configurable thresholds
 - Built-in CSV picker to load past datasets
@@ -54,6 +61,6 @@ Tips
 Highlighted structure
 - `src/fetcher.rs` — Async HTTP client and JSON parsing
 - `src/database.rs` — In-memory store, display, filtering, CSV I/O
-- `src/ui/` — TUI components (`menu_main`, `menu_sub_threshold_setting`, `menu_sub_load_csv`, `select`, `navigation`)
+- `src/ui/` — Ratatui TUI components (`ratatui_app`, `menu_main`, `menu_sub_threshold_setting`, `menu_sub_load_csv`, `select`, `navigation`)
 - `src/action.rs` — Encapsulated implementations for menu actions
 - `src/app.rs` — App wiring and lifecycle

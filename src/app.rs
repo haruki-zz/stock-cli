@@ -92,12 +92,25 @@ pub async fn run() -> Result<()> {
                 }
             }
         } else {
-            write!(out, "Skipped loading previous data.\r\n")?;
+            // User chose not to load previous data; fetch fresh data automatically
+            out.flush()?;
+            // Ensure screen below menu is clean before fetching
+            drop(out);
+            do_update(
+                &mut database,
+                &mut menu,
+                raw_data_dir,
+                &stock_codes,
+                region_config.clone(),
+                info_indices.clone(),
+                sub_top,
+            )
+            .await?;
         }
-        out.flush()?;
-
-        // Redraw clean main menu
-        render_main_menu_full(&mut menu)?;
+        // If we loaded previous data, redraw main menu; do_update already redraws itself
+        if menu.loaded_file.as_deref() == Some(&latest_name) {
+            render_main_menu_full(&mut menu)?;
+        }
     }
 
     // Main interactive loop sharing the same screen

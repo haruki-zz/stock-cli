@@ -8,8 +8,8 @@
 !/Cargo.lock
 !/config.json
 !/stock_code.csv
+!/build_macos_intel_release.sh
 
 # Keep Rust source files under src/
 !/src/
 !/src/**
-

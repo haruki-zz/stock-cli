@@ -57,19 +57,16 @@ impl AsyncStockFetcher {
 
         progress_counter.store(0, Ordering::SeqCst);
 
-        let results: Vec<Option<StockData>> = stream::iter(self.stock_list.iter())
-            .map(|stock_code| {
+        let results: Vec<Option<StockData>> = stream::iter(self.stock_list.clone().into_iter())
+            .map(|stock_code_owned| {
                 let semaphore = Arc::clone(&semaphore);
                 let progress_counter = Arc::clone(&progress_counter);
+                let this = self;
                 async move {
                     let _permit = semaphore.acquire().await.unwrap();
-                    let result = self.fetch_stock_data(stock_code).await;
+                    let result = this.fetch_stock_data(&stock_code_owned).await;
 
-                    let current = progress_counter.fetch_add(1, Ordering::SeqCst) + 1;
-                    let progress = (current as f64 / self.total_stocks as f64) * 100.0;
-                    print!("\rProgress: {:.2}%", progress);
-                    use std::io::{self, Write};
-                    io::stdout().flush().unwrap();
+                    let _current = progress_counter.fetch_add(1, Ordering::SeqCst) + 1;
 
                     result.ok()
                 }
@@ -78,12 +75,7 @@ impl AsyncStockFetcher {
             .collect()
             .await;
 
-        {
-            // Ensure cursor returns to column 0 after progress line
-            use std::io::{self, Write};
-            print!("\r\n");
-            io::stdout().flush().unwrap();
-        }
+        // No direct stdout printing here; UI reads progress_counter instead
 
         let valid_results: Vec<StockData> = results.into_iter().flatten().collect();
 

@@ -3,11 +3,12 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::config:: Config;
+use crate::config::Config;
 use crate::database::StockDatabase;
-use crate::ui::menu_main::{Menu, MenuAction};
-use crate::action::{render_main_menu_full, find_latest_csv, do_update, do_show, do_set_thresholds, do_filter, do_load};
-use crossterm::{cursor, terminal::{self, ClearType, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand, QueueableCommand};
+use crate::ui::menu_main::MenuAction;
+use crate::ui::ratatui_app::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
+use crate::action::{find_latest_csv, do_update, do_show};
+use crossterm::{cursor, terminal::{self, ClearType}, QueueableCommand};
 
 pub async fn run() -> Result<()> {
     let config_path = "config.json";
@@ -39,30 +40,14 @@ pub async fn run() -> Result<()> {
 
     // Prepare database; load later based on user choice
     let mut database = StockDatabase::new(Vec::new());
-
-    // Enter shared alternate screen + raw mode once
-    {
-        let mut out = std::io::stdout();
-        out.execute(EnterAlternateScreen)?;
-        terminal::enable_raw_mode()?;
-    }
-
-    // Render main menu at top (full-screen clear once)
-    let mut menu = Menu::new();
-    render_main_menu_full(&mut menu)?;
-
-    // Compute subcontent top row (below menu)
-    let sub_top: u16 = {
-        let menu_rows = menu.items.len() as u16;
-        // banner: BANNER_HEIGHT (10) + gap (1); menu starts at 11, so sub_top after menu + one blank line
-        10 + 1 + menu_rows + 2
-    };
+    // Fixed subcontent top row used by legacy action screens
+    let sub_top: u16 = 14;
 
     // Initial previous-data prompt shown below the main menu
     if let Some((latest_path, latest_name)) = find_latest_csv(raw_data_dir) {
         let mut out = std::io::stdout();
-        out.queue(cursor::MoveTo(0, sub_top))?;
-        out.queue(terminal::Clear(ClearType::FromCursorDown))?;
+        out.queue(cursor::MoveTo(0, 0))?;
+        out.queue(terminal::Clear(ClearType::All))?;
         use std::io::Write;
         write!(
             out,
@@ -84,7 +69,6 @@ pub async fn run() -> Result<()> {
             match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
                 Ok(db) => {
                     database = db;
-                    menu.loaded_file = Some(latest_name.clone());
                     write!(out, "Data loaded from {}\r\n", latest_name)?;
                 }
                 Err(e) => {
@@ -96,9 +80,10 @@ pub async fn run() -> Result<()> {
             out.flush()?;
             // Ensure screen below menu is clean before fetching
             drop(out);
+            // Perform update (uses legacy UI and redraws)
             do_update(
                 &mut database,
-                &mut menu,
+                &mut crate::ui::menu_main::Menu::new(),
                 raw_data_dir,
                 &stock_codes,
                 region_config.clone(),
@@ -107,55 +92,49 @@ pub async fn run() -> Result<()> {
             )
             .await?;
         }
-        // If we loaded previous data, redraw main menu; do_update already redraws itself
-        if menu.loaded_file.as_deref() == Some(&latest_name) {
-            render_main_menu_full(&mut menu)?;
-        }
+        // Nothing to redraw here; Ratatui UI will start below
     }
 
-    // Main interactive loop sharing the same screen
+    // Main interactive loop using Ratatui
     loop {
-        // Ensure raw mode is enabled before capturing navigation input
-        let _ = terminal::enable_raw_mode();
-        let action = menu.choose_action()?;
-
-        match action {
+        match run_main_menu()? {
             MenuAction::Update => {
-                do_update(
-                    &mut database,
-                    &mut menu,
+                let (data, saved_file) = run_fetch_progress(
                     raw_data_dir,
                     &stock_codes,
                     region_config.clone(),
                     info_indices.clone(),
-                    sub_top,
                 )
                 .await?;
+                database.update(data);
+                println!("Saved: {}", saved_file);
             }
             MenuAction::Show => {
-                do_show(&database, &mut menu, sub_top)?;
+                do_show(&database, &mut crate::ui::menu_main::Menu::new(), sub_top)?;
             }
             MenuAction::SetThresholds => {
-                do_set_thresholds(&mut thresholds, &mut menu, sub_top)?;
+                run_thresholds_editor(&mut thresholds)?;
             }
             MenuAction::Filter => {
-                do_filter(&database, &thresholds, &mut menu, sub_top)?;
+                let codes = database.filter_stocks(&thresholds);
+                run_results_table(&database, &codes)?;
             }
             MenuAction::Load => {
-                do_load(&mut database, &mut menu, raw_data_dir, sub_top)?;
+                if let Some(filename) = run_csv_picker(raw_data_dir)? {
+                    match StockDatabase::load_from_csv(&filename) {
+                        Ok(loaded_db) => {
+                            database = loaded_db;
+                            println!("Loaded: {}", filename);
+                        }
+                        Err(e) => {
+                            eprintln!("Load failed for {}: {}", filename, e);
+                        }
+                    }
+                }
             }
-            MenuAction::Exit => {
-                println!("Goodbye.");
-                break;
-            }
+            MenuAction::Exit => break,
+            _ => {}
         }
-    }
-
-    // Cleanup screen
-    {
-        let mut out = std::io::stdout();
-        let _ = terminal::disable_raw_mode();
-        let _ = out.execute(LeaveAlternateScreen);
     }
 
     Ok(())

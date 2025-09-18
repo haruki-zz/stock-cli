@@ -602,7 +602,7 @@ pub async fn run_fetch_progress(
     let progress = fetcher.progress_counter.clone();
     let total = fetcher.total_stocks;
 
-    let mut handle = tokio::spawn(async move { fetcher.fetch_data().await });
+    let handle = tokio::spawn(async move { fetcher.fetch_data().await });
 
     // Setup Ratatui progress UI
     terminal::enable_raw_mode()?;

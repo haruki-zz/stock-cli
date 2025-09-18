@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::database::StockDatabase;
 use crate::ui::menu_main::MenuAction;
 use crate::ui::ratatui_app::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
-use crate::action::{find_latest_csv, do_update, do_show};
+use crate::action::{find_latest_csv, do_show};
 use crossterm::{cursor, terminal::{self, ClearType}, QueueableCommand};
 
 pub async fn run() -> Result<()> {
@@ -80,17 +80,16 @@ pub async fn run() -> Result<()> {
             out.flush()?;
             // Ensure screen below menu is clean before fetching
             drop(out);
-            // Perform update (uses legacy UI and redraws)
-            do_update(
-                &mut database,
-                &mut crate::ui::menu_main::Menu::new(),
+            // Perform update with Ratatui progress
+            let (data, saved_file) = run_fetch_progress(
                 raw_data_dir,
                 &stock_codes,
                 region_config.clone(),
                 info_indices.clone(),
-                sub_top,
             )
             .await?;
+            database.update(data);
+            println!("Saved: {}", saved_file);
         }
         // Nothing to redraw here; Ratatui UI will start below
     }
@@ -110,7 +109,7 @@ pub async fn run() -> Result<()> {
                 println!("Saved: {}", saved_file);
             }
             MenuAction::Show => {
-                do_show(&database, &mut crate::ui::menu_main::Menu::new(), sub_top)?;
+                do_show(&database)?;
             }
             MenuAction::SetThresholds => {
                 run_thresholds_editor(&mut thresholds)?;
@@ -133,7 +132,6 @@ pub async fn run() -> Result<()> {
                 }
             }
             MenuAction::Exit => break,
-            _ => {}
         }
     }
 

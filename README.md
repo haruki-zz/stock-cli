@@ -41,7 +41,6 @@ Menu actions
     - Values display with two decimals
 - Refresh Data — Fetch latest data and save to `raw_data/`
   - Progress screen shows “Please wait…” and a textual percentage; Enter to continue when done
-- View Stocks — Enter space-separated codes to view details (simple output)
 - Load CSV — Pick a CSV from `raw_data/` using the same keys (↑/↓/j/k, Enter/Esc)
 - Quit — Exit
 
@@ -61,6 +60,6 @@ Tips
 Highlighted structure
 - `src/fetcher.rs` — Async HTTP client and JSON parsing
 - `src/database.rs` — In-memory store, display, filtering, CSV I/O
-- `src/ui/` — Ratatui TUI components (`ratatui_app`, `menu_main`, `menu_sub_threshold_setting`, `menu_sub_load_csv`, `select`, `navigation`)
+- `src/ui/` — Ratatui TUI components (`ratatui_app`, `menu_main`)
 - `src/action.rs` — Encapsulated implementations for menu actions
 - `src/app.rs` — App wiring and lifecycle

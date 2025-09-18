@@ -18,7 +18,6 @@ impl<'a> AppState<'a> {
                 ("Show Filtered", MenuAction::Filter),
                 ("Set Filters", MenuAction::SetThresholds),
                 ("Refresh Data", MenuAction::Update),
-                ("View Stocks", MenuAction::Show),
                 ("Load CSV", MenuAction::Load),
                 ("Quit", MenuAction::Exit),
             ],

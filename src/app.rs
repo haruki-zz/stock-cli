@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::database::StockDatabase;
 use crate::ui::menu_main::MenuAction;
 use crate::ui::ratatui_app::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
-use crate::action::{find_latest_csv, do_show};
+use crate::action::find_latest_csv;
 use crossterm::{cursor, terminal::{self, ClearType}, QueueableCommand};
 
 pub async fn run() -> Result<()> {
@@ -107,9 +107,6 @@ pub async fn run() -> Result<()> {
                 .await?;
                 database.update(data);
                 println!("Saved: {}", saved_file);
-            }
-            MenuAction::Show => {
-                do_show(&database)?;
             }
             MenuAction::SetThresholds => {
                 run_thresholds_editor(&mut thresholds)?;

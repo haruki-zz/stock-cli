@@ -6,8 +6,28 @@ use std::path::Path;
 use crate::config::Config;
 use crate::database::StockDatabase;
 use crate::ui::menu_main::MenuAction;
-use crate::ui::ratatui_app::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
-use crate::action::find_latest_csv;
+use crate::ui::ratatui::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
+// Find latest CSV in directory
+fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut latest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.extension().and_then(|s| s.to_str()) == Some("csv") {
+            if let Ok(meta) = e.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    if latest.as_ref().map(|(t, _)| &modified > t).unwrap_or(true) {
+                        latest = Some((modified, p));
+                    }
+                }
+            }
+        }
+    }
+    latest.map(|(_, p)| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        (p, name)
+    })
+}
 use crossterm::{cursor, terminal::{self, ClearType}, QueueableCommand};
 
 pub async fn run() -> Result<()> {
@@ -40,6 +60,7 @@ pub async fn run() -> Result<()> {
 
     // Prepare database; load later based on user choice
     let mut database = StockDatabase::new(Vec::new());
+    let mut loaded_file: Option<String> = None;
     // Fixed subcontent top row used by legacy action screens
     let sub_top: u16 = 14;
 
@@ -70,6 +91,7 @@ pub async fn run() -> Result<()> {
                 Ok(db) => {
                     database = db;
                     write!(out, "Data loaded from {}\r\n", latest_name)?;
+                    loaded_file = Some(latest_name.clone());
                 }
                 Err(e) => {
                     write!(out, "Failed to load data: {}\r\n", e)?;
@@ -90,13 +112,18 @@ pub async fn run() -> Result<()> {
             .await?;
             database.update(data);
             println!("Saved: {}", saved_file);
+            if let Some(name) = std::path::Path::new(&saved_file).file_name().and_then(|s| s.to_str()) {
+                loaded_file = Some(name.to_string());
+            } else {
+                loaded_file = Some(saved_file);
+            }
         }
         // Nothing to redraw here; Ratatui UI will start below
     }
 
     // Main interactive loop using Ratatui
     loop {
-        match run_main_menu()? {
+        match run_main_menu(loaded_file.as_deref())? {
             MenuAction::Update => {
                 let (data, saved_file) = run_fetch_progress(
                     raw_data_dir,
@@ -107,6 +134,11 @@ pub async fn run() -> Result<()> {
                 .await?;
                 database.update(data);
                 println!("Saved: {}", saved_file);
+                if let Some(name) = std::path::Path::new(&saved_file).file_name().and_then(|s| s.to_str()) {
+                    loaded_file = Some(name.to_string());
+                } else {
+                    loaded_file = Some(saved_file);
+                }
             }
             MenuAction::SetThresholds => {
                 run_thresholds_editor(&mut thresholds)?;
@@ -121,6 +153,11 @@ pub async fn run() -> Result<()> {
                         Ok(loaded_db) => {
                             database = loaded_db;
                             println!("Loaded: {}", filename);
+                            if let Some(name) = std::path::Path::new(&filename).file_name().and_then(|s| s.to_str()) {
+                                loaded_file = Some(name.to_string());
+                            } else {
+                                loaded_file = Some(filename);
+                            }
                         }
                         Err(e) => {
                             eprintln!("Load failed for {}: {}", filename, e);

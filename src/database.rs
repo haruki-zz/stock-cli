@@ -14,21 +14,6 @@ impl StockDatabase {
         Self { data }
     }
 
-    pub fn show_stock_info(&self, stock_codes: &[String]) {
-        let filtered_data: Vec<&StockData> = self
-            .data
-            .iter()
-            .filter(|stock| stock_codes.contains(&stock.stock_code))
-            .collect();
-
-        if filtered_data.is_empty() {
-            println!("No matching stock found.");
-            return;
-        }
-
-        self.display_table(&filtered_data);
-    }
-
     pub fn filter_stocks(&self, thresholds: &HashMap<String, Threshold>) -> Vec<String> {
         self.data
             .iter()
@@ -61,84 +46,6 @@ impl StockDatabase {
         let _ = out.flush();
     }
 
-    fn display_table(&self, stocks: &[&StockData]) {
-        use unicode_width::UnicodeWidthStr;
-        use std::io::{self, Write};
-        let mut out = io::stdout();
-
-        let headers = vec![
-            "Stock Name", "Stock Code", "Current", "Prev Closed", "Open", "Increase",
-            "Highest", "Lowest", "Turnover", "Amp", "TM",
-        ];
-
-        let rows: Vec<Vec<String>> = stocks
-            .iter()
-            .map(|stock| {
-                vec![
-                    stock.stock_name.clone(),
-                    stock.stock_code.clone(),
-                    format!("{:.2}", stock.curr),
-                    format!("{:.2}", stock.prev_closed),
-                    format!("{:.2}", stock.open),
-                    format!("{:.2}", stock.increase),
-                    format!("{:.2}", stock.highest),
-                    format!("{:.2}", stock.lowest),
-                    format!("{:.2}", stock.turn_over),
-                    format!("{:.2}", stock.amp),
-                    format!("{:.2}", stock.tm),
-                ]
-            })
-            .collect();
-
-        let all_rows: Vec<Vec<String>> = std::iter::once(headers.iter().map(|h| h.to_string()).collect())
-            .chain(rows)
-            .collect();
-
-        let col_count = all_rows[0].len();
-        let mut col_widths = vec![0; col_count];
-
-        for row in &all_rows {
-            for (i, cell) in row.iter().enumerate() {
-                let width = cell.width();
-                if width > col_widths[i] {
-                    col_widths[i] = width;
-                }
-            }
-        }
-
-        let border = format!(
-            "+{}+",
-            col_widths
-                .iter()
-                .map(|w| "-".repeat(w + 2))
-                .collect::<Vec<_>>()
-                .join("+")
-        );
-
-        let _ = write!(out, "{}\r\n", border);
-
-        for (row_idx, row) in all_rows.iter().enumerate() {
-            let formatted_row = row
-                .iter()
-                .zip(&col_widths)
-                .map(|(cell, width)| {
-                    let cell_width = cell.width();
-                    let padding = width - cell_width;
-                    format!(" {}{} ", " ".repeat(padding), cell)
-                })
-                .collect::<Vec<_>>()
-                .join("|");
-
-            let _ = write!(out, "|{}|\r\n", formatted_row);
-
-            if row_idx == 0 {
-                let _ = write!(out, "{}\r\n", border);
-            }
-        }
-
-        let _ = write!(out, "{}\r\n", border);
-        let _ = out.flush();
-    }
 
     pub fn save_to_csv(&self, file_path: &str) -> Result<()> {
         let mut writer = csv::Writer::from_path(file_path).context("Failed to create CSV writer")?;

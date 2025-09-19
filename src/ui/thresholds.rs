@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::{execute, terminal};
 use ratatui::{prelude::*, widgets::*};
 use crate::config::Threshold;
-use super::utils::centered_rect;
+use crate::ui::utils::centered_rect;
 
 pub fn run_thresholds_editor(thresholds: &mut std::collections::HashMap<String, Threshold>) -> Result<()> {
     terminal::enable_raw_mode()?;
@@ -76,7 +76,6 @@ pub fn run_thresholds_editor(thresholds: &mut std::collections::HashMap<String, 
                                 mode = Mode::Edit { name, lower: String::new(), upper: String::new(), field: 0, orig_lower: t.lower, orig_upper: t.upper };
                             }
                         } else if selected == keys.len() {
-                            // Add path: create a new placeholder and edit
                             let name = "custom".to_string();
                             thresholds.entry(name.clone()).or_insert(Threshold{lower:0.0, upper:0.0, valid:true});
                             if !keys.contains(&name) { keys.push(name.clone()); keys.sort(); }
@@ -85,7 +84,7 @@ pub fn run_thresholds_editor(thresholds: &mut std::collections::HashMap<String, 
                     }
                     (Mode::List, crossterm::event::KeyCode::Esc) => { terminal::disable_raw_mode()?; let mut out=std::io::stdout(); let _=execute!(out, terminal::LeaveAlternateScreen); return Ok(()); }
                     (Mode::Edit { name, lower, upper, field, orig_lower, orig_upper }, key) => {
-                        let nm = name.clone(); let mut lo = lower.clone(); let mut up = upper.clone(); let mut fld = *field;
+                        let mut nm = name.clone(); let mut lo = lower.clone(); let mut up = upper.clone(); let mut fld = *field;
                         match key {
                             crossterm::event::KeyCode::Tab | crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => { fld = (fld + 1) % 2; }
                             crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => { fld = (fld + 1) % 2; }

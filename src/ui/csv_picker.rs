@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::{execute, terminal};
 use ratatui::{prelude::*, widgets::*};
 
-use super::utils::list_csv_files;
+use crate::ui::utils::list_csv_files;
 
 pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
     terminal::enable_raw_mode()?;
@@ -50,7 +50,11 @@ pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
                 })
                 .collect();
             let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("Choose CSV (Enter to select, Esc to cancel)"));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Choose CSV — \u{2191}/\u{2193}/j/k move, Enter select, Esc cancel"),
+                );
             f.render_widget(list, size);
         })?;
 

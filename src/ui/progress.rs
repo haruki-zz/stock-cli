@@ -4,7 +4,7 @@ use ratatui::{prelude::*, widgets::*};
 use crate::config::{RegionConfig, InfoIndex};
 use crate::fetcher::{AsyncStockFetcher, StockData};
 use crate::database::StockDatabase;
-use super::utils::centered_rect;
+use crate::ui::utils::centered_rect;
 
 pub async fn run_fetch_progress(
     raw_data_dir: &str,
@@ -68,3 +68,4 @@ pub async fn run_fetch_progress(
     let mut out = std::io::stdout(); let _ = execute!(out, terminal::LeaveAlternateScreen);
     Ok((data, filename))
 }
+

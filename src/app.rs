@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::config::Config;
 use crate::database::StockDatabase;
 use crate::ui::menu_main::MenuAction;
-use crate::ui::ratatui::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
+use crate::ui::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
 // Find latest CSV in directory
 fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
     let entries = std::fs::read_dir(dir).ok()?;

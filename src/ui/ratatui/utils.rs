@@ -1,4 +1,3 @@
-use ratatui::prelude::*;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use std::path::PathBuf;
 use std::time::SystemTime;

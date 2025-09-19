@@ -85,7 +85,7 @@ pub fn run_thresholds_editor(thresholds: &mut std::collections::HashMap<String, 
                     }
                     (Mode::List, crossterm::event::KeyCode::Esc) => { terminal::disable_raw_mode()?; let mut out=std::io::stdout(); let _=execute!(out, terminal::LeaveAlternateScreen); return Ok(()); }
                     (Mode::Edit { name, lower, upper, field, orig_lower, orig_upper }, key) => {
-                        let mut nm = name.clone(); let mut lo = lower.clone(); let mut up = upper.clone(); let mut fld = *field;
+                        let nm = name.clone(); let mut lo = lower.clone(); let mut up = upper.clone(); let mut fld = *field;
                         match key {
                             crossterm::event::KeyCode::Tab | crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => { fld = (fld + 1) % 2; }
                             crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => { fld = (fld + 1) % 2; }

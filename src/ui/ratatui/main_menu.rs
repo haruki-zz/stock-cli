@@ -11,7 +11,7 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
-    let mut items: Vec<(&str, MenuAction)> = vec![
+    let items: Vec<(&str, MenuAction)> = vec![
         ("Show Filtered", MenuAction::Filter),
         ("Set Filters", MenuAction::SetThresholds),
         ("Refresh Data", MenuAction::Update),

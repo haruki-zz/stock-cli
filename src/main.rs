@@ -1,8 +1,8 @@
-mod config;
-mod fetcher;
-mod database;
-mod ui;
 mod app;
+mod config;
+mod database;
+mod fetcher;
+mod ui;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

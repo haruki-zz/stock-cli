@@ -1,10 +1,21 @@
-use anyhow::Result;
-use crossterm::{execute, terminal};
-use ratatui::{prelude::*, widgets::*};
-use crate::config::{RegionConfig, InfoIndex};
-use crate::fetcher::{AsyncStockFetcher, StockData};
+use crate::config::{InfoIndex, RegionConfig};
 use crate::database::StockDatabase;
-use crate::ui::utils::centered_rect;
+use crate::fetcher::{AsyncStockFetcher, StockData};
+use crate::ui::{utils::centered_rect, TerminalGuard};
+use anyhow::{anyhow, Result};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::{prelude::*, widgets::*};
+
+#[derive(Debug)]
+pub struct FetchCancelled;
+
+impl std::fmt::Display for FetchCancelled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Fetch cancelled by user")
+    }
+}
+
+impl std::error::Error for FetchCancelled {}
 
 pub async fn run_fetch_progress(
     raw_data_dir: &str,
@@ -17,55 +28,123 @@ pub async fn run_fetch_progress(
     let total = fetcher.total_stocks;
     let handle = tokio::spawn(async move { fetcher.fetch_data().await });
 
-    terminal::enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, terminal::EnterAlternateScreen)?;
-    let backend = ratatui::backend::CrosstermBackend::new(stdout);
-    let mut terminal = ratatui::Terminal::new(backend)?;
+    let mut guard = TerminalGuard::new()?;
+    let mut cancelled = false;
 
     loop {
-        if handle.is_finished() { break; }
         let done = progress.load(std::sync::atomic::Ordering::SeqCst);
-        let ratio = if total==0 {0.0} else {(done as f64 / total as f64).clamp(0.0,1.0)};
-        terminal.draw(|f| {
-            let size = f.size(); let area = centered_rect(60, 20, size); f.render_widget(Clear, area);
-            let block = Block::default().borders(Borders::ALL).title("Fetching latest data..."); f.render_widget(block.clone(), area);
+        let ratio = if total == 0 {
+            0.0
+        } else {
+            (done as f64 / total as f64).clamp(0.0, 1.0)
+        };
+
+        guard.terminal_mut().draw(|f| {
+            let size = f.size();
+            let area = centered_rect(60, 20, size);
+            f.render_widget(Clear, area);
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title("Fetching latest data...");
+            f.render_widget(block.clone(), area);
             let inner = block.inner(area);
-            let chunks = Layout::default().direction(Direction::Vertical)
-                .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(1)]).split(inner);
-            let label = format!("Progress: {} / {} ({:.0}%)", done.min(total), total, ratio*100.0);
-            f.render_widget(Paragraph::new("Please wait while we fetch data").alignment(Alignment::Center), chunks[0]);
-            f.render_widget(Paragraph::new(label).alignment(Alignment::Center), chunks[1]);
-            f.render_widget(Paragraph::new("Esc to cancel").style(Style::default().fg(Color::Gray)).alignment(Alignment::Center), chunks[2]);
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                ])
+                .split(inner);
+            let label = format!(
+                "Progress: {} / {} ({:.0}%)",
+                done.min(total),
+                total,
+                ratio * 100.0
+            );
+            f.render_widget(
+                Paragraph::new("Please wait while we fetch data").alignment(Alignment::Center),
+                chunks[0],
+            );
+            f.render_widget(
+                Paragraph::new(label).alignment(Alignment::Center),
+                chunks[1],
+            );
+            f.render_widget(
+                Paragraph::new("Esc to cancel")
+                    .style(Style::default().fg(Color::Gray))
+                    .alignment(Alignment::Center),
+                chunks[2],
+            );
         })?;
-        if crossterm::event::poll(std::time::Duration::from_millis(100))? {
-            if let crossterm::event::Event::Key(k) = crossterm::event::read()? {
-                if matches!(k.code, crossterm::event::KeyCode::Esc)
-                    || (k.code == crossterm::event::KeyCode::Char('c') && k.modifiers.contains(crossterm::event::KeyModifiers::CONTROL))
-                { /* best-effort cancel */ }
+
+        if handle.is_finished() {
+            break;
+        }
+
+        if event::poll(std::time::Duration::from_millis(100))? {
+            if let Event::Key(k) = event::read()? {
+                if matches!(k.code, KeyCode::Esc)
+                    || (k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL))
+                {
+                    cancelled = true;
+                    handle.abort();
+                    break;
+                }
             }
         }
+
         tokio::time::sleep(std::time::Duration::from_millis(120)).await;
     }
 
-    let res = handle.await.expect("fetch join");
+    if cancelled {
+        guard.restore()?;
+        let _ = handle.await;
+        return Err(FetchCancelled.into());
+    }
+
+    let res = handle
+        .await
+        .map_err(|e| anyhow!("Fetch task failed: {}", e))?;
     let data = res?;
     let timestamp = chrono::Local::now().format("%Y_%m_%d_%H_%M");
     let database = StockDatabase::new(data.clone());
     let filename = format!("{}/{}_raw.csv", raw_data_dir, timestamp);
     database.save_to_csv(&filename)?;
 
-    terminal.draw(|f| {
-        let size = f.size(); let area = centered_rect(60, 20, size); f.render_widget(Clear, area);
-        let block = Block::default().borders(Borders::ALL).title("Done"); f.render_widget(block.clone(), area);
+    guard.terminal_mut().draw(|f| {
+        let size = f.size();
+        let area = centered_rect(60, 20, size);
+        f.render_widget(Clear, area);
+        let block = Block::default().borders(Borders::ALL).title("Done");
+        f.render_widget(block.clone(), area);
         let inner = block.inner(area);
-        let msg = Paragraph::new(format!("Fetched {} records. Saved to {}\nPress Enter to continue.", data.len(), filename)).alignment(Alignment::Center);
+        let msg = Paragraph::new(format!(
+            "Fetched {} records. Saved to {}\nPress Enter to continue.",
+            data.len(),
+            filename
+        ))
+        .alignment(Alignment::Center);
         f.render_widget(msg, inner);
     })?;
-    loop { if crossterm::event::poll(std::time::Duration::from_millis(100))? { if let crossterm::event::Event::Key(k)=crossterm::event::read()? { if matches!(k.code, crossterm::event::KeyCode::Enter|crossterm::event::KeyCode::Char('\n')|crossterm::event::KeyCode::Char('\r')) { break; } } } }
+    loop {
+        if event::poll(std::time::Duration::from_millis(100))? {
+            if let Event::Key(k) = event::read()? {
+                if matches!(
+                    k.code,
+                    KeyCode::Enter | KeyCode::Char('\n') | KeyCode::Char('\r')
+                ) {
+                    break;
+                }
+                if matches!(k.code, KeyCode::Esc)
+                    || (k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL))
+                {
+                    break;
+                }
+            }
+        }
+    }
 
-    terminal::disable_raw_mode()?;
-    let mut out = std::io::stdout(); let _ = execute!(out, terminal::LeaveAlternateScreen);
+    guard.restore()?;
     Ok((data, filename))
 }
-

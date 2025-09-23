@@ -31,7 +31,11 @@ pub fn list_csv_files(dir: &str) -> Vec<(String, PathBuf, SystemTime, u64)> {
                 if let Ok(meta) = e.metadata() {
                     let m = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
                     let s = meta.len();
-                    if let Some(name) = p.file_name().and_then(|s| s.to_str()).map(|s| s.to_string()) {
+                    if let Some(name) = p
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                    {
                         entries.push((name, p, m, s));
                     }
                 }
@@ -41,4 +45,3 @@ pub fn list_csv_files(dir: &str) -> Vec<(String, PathBuf, SystemTime, u64)> {
     entries.sort_by(|a, b| b.2.cmp(&a.2));
     entries
 }
-

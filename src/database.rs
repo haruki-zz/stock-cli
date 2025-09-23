@@ -46,13 +46,22 @@ impl StockDatabase {
         let _ = out.flush();
     }
 
-
     pub fn save_to_csv(&self, file_path: &str) -> Result<()> {
-        let mut writer = csv::Writer::from_path(file_path).context("Failed to create CSV writer")?;
+        let mut writer =
+            csv::Writer::from_path(file_path).context("Failed to create CSV writer")?;
 
         writer.write_record(&[
-            "stockName", "stockCode", "curr", "prevClosed", "open", "increase", "highest",
-            "lowest", "turnOver", "amp", "tm",
+            "stockName",
+            "stockCode",
+            "curr",
+            "prevClosed",
+            "open",
+            "increase",
+            "highest",
+            "lowest",
+            "turnOver",
+            "amp",
+            "tm",
         ])?;
 
         for stock in &self.data {

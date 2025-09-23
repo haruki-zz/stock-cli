@@ -1,21 +1,26 @@
 use anyhow::Result;
-use crossterm::{execute, terminal};
+use crossterm::{
+    event::{self, Event, KeyCode, KeyModifiers},
+    terminal,
+};
 use ratatui::{prelude::*, widgets::*};
-use crate::database::StockDatabase;
+use std::time::Duration;
+
+use crate::{database::StockDatabase, ui::TerminalGuard};
 
 pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<()> {
-    terminal::enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, terminal::EnterAlternateScreen)?;
-    let backend = ratatui::backend::CrosstermBackend::new(stdout);
-    let mut terminal = ratatui::Terminal::new(backend)?;
+    let mut guard = TerminalGuard::new()?;
 
     let mut rows_data: Vec<&crate::fetcher::StockData> = Vec::new();
-    for code in codes { if let Some(s) = database.data.iter().find(|s| &s.stock_code==code) { rows_data.push(s); } }
+    for code in codes {
+        if let Some(s) = database.data.iter().find(|s| &s.stock_code == code) {
+            rows_data.push(s);
+        }
+    }
     let mut offset: usize = 0;
 
     loop {
-        terminal.draw(|f| {
+        guard.terminal_mut().draw(|f| {
             let area_full = f.size();
             let chunks = Layout::default().direction(Direction::Vertical)
                 .constraints([Constraint::Min(3), Constraint::Length(1)]).split(area_full);
@@ -46,21 +51,45 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
             f.render_widget(Paragraph::new(footer_text).style(Style::default().fg(Color::Gray)), footer_area);
         })?;
 
-        if crossterm::event::poll(std::time::Duration::from_millis(200))? {
-            if let crossterm::event::Event::Key(k) = crossterm::event::read()? {
+        if event::poll(Duration::from_millis(200))? {
+            if let Event::Key(k) = event::read()? {
                 match k.code {
-                    crossterm::event::KeyCode::Enter | crossterm::event::KeyCode::Esc => { terminal::disable_raw_mode()?; let mut out=std::io::stdout(); let _=execute!(out, terminal::LeaveAlternateScreen); return Ok(()); }
-                    crossterm::event::KeyCode::Char('c') if k.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => { terminal::disable_raw_mode()?; let mut out=std::io::stdout(); let _=execute!(out, terminal::LeaveAlternateScreen); return Ok(()); }
-                    crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') => { offset = offset.saturating_add(1); }
-                    crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') => { offset = offset.saturating_sub(1); }
-                    crossterm::event::KeyCode::PageDown => { let (_,h)=crossterm::terminal::size().unwrap_or((80,24)); let cap=h.saturating_sub(3) as usize; offset = offset.saturating_add(cap); }
-                    crossterm::event::KeyCode::PageUp => { let (_,h)=crossterm::terminal::size().unwrap_or((80,24)); let cap=h.saturating_sub(3) as usize; offset = offset.saturating_sub(cap); }
-                    crossterm::event::KeyCode::Home => { offset = 0; }
-                    crossterm::event::KeyCode::End => { let (_,h)=crossterm::terminal::size().unwrap_or((80,24)); let cap=h.saturating_sub(3) as usize; let max_off = rows_data.len().saturating_sub(cap.max(1)); offset = max_off; }
+                    KeyCode::Enter | KeyCode::Esc => {
+                        guard.restore()?;
+                        return Ok(());
+                    }
+                    KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                        guard.restore()?;
+                        return Ok(());
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        offset = offset.saturating_add(1);
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        offset = offset.saturating_sub(1);
+                    }
+                    KeyCode::PageDown => {
+                        let (_, h) = terminal::size().unwrap_or((80, 24));
+                        let cap = h.saturating_sub(3) as usize;
+                        offset = offset.saturating_add(cap);
+                    }
+                    KeyCode::PageUp => {
+                        let (_, h) = terminal::size().unwrap_or((80, 24));
+                        let cap = h.saturating_sub(3) as usize;
+                        offset = offset.saturating_sub(cap);
+                    }
+                    KeyCode::Home => {
+                        offset = 0;
+                    }
+                    KeyCode::End => {
+                        let (_, h) = terminal::size().unwrap_or((80, 24));
+                        let cap = h.saturating_sub(3) as usize;
+                        let max_off = rows_data.len().saturating_sub(cap.max(1));
+                        offset = max_off;
+                    }
                     _ => {}
                 }
             }
         }
     }
 }
-

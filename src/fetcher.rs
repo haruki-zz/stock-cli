@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use futures::stream::{self, StreamExt};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -121,7 +121,7 @@ impl AsyncStockFetcher {
                         anyhow::bail!("Request for stock {} was redirected", stock_code);
                     }
 
-                    if response.status() == 403 {
+                    if response.status() == StatusCode::FORBIDDEN {
                         anyhow::bail!("Request for stock {} was blocked by firewall", stock_code);
                     }
 
@@ -129,12 +129,27 @@ impl AsyncStockFetcher {
                         let text = response.text().await?;
 
                         if text.contains(&self.region_config.urls.firewall_warning.text) {
-                            anyhow::bail!("Request for stock {} was blocked by firewall", stock_code);
+                            anyhow::bail!(
+                                "Request for stock {} was blocked by firewall",
+                                stock_code
+                            );
                         }
 
                         return self
                             .parse_stock_data(stock_code, &text)
                             .context("Failed to parse stock data");
+                    } else {
+                        retry_count += 1;
+                        if retry_count >= max_retries {
+                            anyhow::bail!(
+                                "Request for stock {} failed with status {}",
+                                stock_code,
+                                response.status()
+                            );
+                        }
+                        let delay = Duration::from_millis(2_u64.pow(retry_count as u32) * 1000);
+                        sleep(delay).await;
+                        continue;
                     }
                 }
                 Err(e) => {
@@ -142,10 +157,13 @@ impl AsyncStockFetcher {
                     if retry_count >= max_retries {
                         anyhow::bail!(
                             "Failed to fetch stock {} after {} retries: {}",
-                            stock_code, max_retries, e
+                            stock_code,
+                            max_retries,
+                            e
                         );
                     }
-                    sleep(Duration::from_millis(2_u64.pow(retry_count as u32) * 1000)).await;
+                    let delay = Duration::from_millis(2_u64.pow(retry_count as u32) * 1000);
+                    sleep(delay).await;
                     continue;
                 }
             }

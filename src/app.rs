@@ -6,7 +6,10 @@ use std::path::Path;
 use crate::config::Config;
 use crate::database::StockDatabase;
 use crate::ui::menu_main::MenuAction;
-use crate::ui::{run_main_menu, run_csv_picker, run_thresholds_editor, run_results_table, run_fetch_progress};
+use crate::ui::{
+    run_csv_picker, run_fetch_progress, run_main_menu, run_results_table, run_thresholds_editor,
+    FetchCancelled,
+};
 // Find latest CSV in directory
 fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
     let entries = std::fs::read_dir(dir).ok()?;
@@ -24,11 +27,19 @@ fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
         }
     }
     latest.map(|(_, p)| {
-        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let name = p
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
         (p, name)
     })
 }
-use crossterm::{cursor, terminal::{self, ClearType}, QueueableCommand};
+use crossterm::{
+    cursor,
+    terminal::{self, ClearType},
+    QueueableCommand,
+};
 
 pub async fn run() -> Result<()> {
     let config_path = "config.json";
@@ -103,19 +114,33 @@ pub async fn run() -> Result<()> {
             // Ensure screen below menu is clean before fetching
             drop(out);
             // Perform update with Ratatui progress
-            let (data, saved_file) = run_fetch_progress(
+            match run_fetch_progress(
                 raw_data_dir,
                 &stock_codes,
                 region_config.clone(),
                 info_indices.clone(),
             )
-            .await?;
-            database.update(data);
-            println!("Saved: {}", saved_file);
-            if let Some(name) = std::path::Path::new(&saved_file).file_name().and_then(|s| s.to_str()) {
-                loaded_file = Some(name.to_string());
-            } else {
-                loaded_file = Some(saved_file);
+            .await
+            {
+                Ok((data, saved_file)) => {
+                    database.update(data);
+                    println!("Saved: {}", saved_file);
+                    if let Some(name) = std::path::Path::new(&saved_file)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                    {
+                        loaded_file = Some(name.to_string());
+                    } else {
+                        loaded_file = Some(saved_file);
+                    }
+                }
+                Err(err) => {
+                    if err.downcast_ref::<FetchCancelled>().is_some() {
+                        println!("Fetch cancelled.");
+                    } else {
+                        eprintln!("Failed to fetch data: {}", err);
+                    }
+                }
             }
         }
         // Nothing to redraw here; Ratatui UI will start below
@@ -125,19 +150,33 @@ pub async fn run() -> Result<()> {
     loop {
         match run_main_menu(loaded_file.as_deref())? {
             MenuAction::Update => {
-                let (data, saved_file) = run_fetch_progress(
+                match run_fetch_progress(
                     raw_data_dir,
                     &stock_codes,
                     region_config.clone(),
                     info_indices.clone(),
                 )
-                .await?;
-                database.update(data);
-                println!("Saved: {}", saved_file);
-                if let Some(name) = std::path::Path::new(&saved_file).file_name().and_then(|s| s.to_str()) {
-                    loaded_file = Some(name.to_string());
-                } else {
-                    loaded_file = Some(saved_file);
+                .await
+                {
+                    Ok((data, saved_file)) => {
+                        database.update(data);
+                        println!("Saved: {}", saved_file);
+                        if let Some(name) = std::path::Path::new(&saved_file)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                        {
+                            loaded_file = Some(name.to_string());
+                        } else {
+                            loaded_file = Some(saved_file);
+                        }
+                    }
+                    Err(err) => {
+                        if err.downcast_ref::<FetchCancelled>().is_some() {
+                            println!("Update cancelled.");
+                        } else {
+                            eprintln!("Failed to refresh data: {}", err);
+                        }
+                    }
                 }
             }
             MenuAction::SetThresholds => {
@@ -153,7 +192,10 @@ pub async fn run() -> Result<()> {
                         Ok(loaded_db) => {
                             database = loaded_db;
                             println!("Loaded: {}", filename);
-                            if let Some(name) = std::path::Path::new(&filename).file_name().and_then(|s| s.to_str()) {
+                            if let Some(name) = std::path::Path::new(&filename)
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                            {
                                 loaded_file = Some(name.to_string());
                             } else {
                                 loaded_file = Some(filename);
@@ -177,7 +219,8 @@ fn load_stock_codes(file_path: &str) -> Result<Vec<String>> {
         anyhow::bail!("Stock codes file not found: {}", file_path);
     }
 
-    let mut reader = csv::Reader::from_path(file_path).context("Failed to open stock codes file")?;
+    let mut reader =
+        csv::Reader::from_path(file_path).context("Failed to open stock codes file")?;
 
     let mut codes = Vec::new();
     for result in reader.records() {

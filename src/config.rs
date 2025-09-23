@@ -54,7 +54,7 @@ pub struct Config {
 impl Config {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
-        
+
         // Try multiple locations for the config file
         let search_paths = vec![
             path.to_path_buf(),
@@ -68,12 +68,12 @@ impl Config {
         ];
 
         let mut last_error = None;
-        
+
         for search_path in search_paths {
             match std::fs::read_to_string(&search_path) {
                 Ok(content) => {
-                    let config: Config = serde_json::from_str(&content)
-                        .context("Failed to parse config JSON")?;
+                    let config: Config =
+                        serde_json::from_str(&content).context("Failed to parse config JSON")?;
                     return Ok(config);
                 }
                 Err(e) => {
@@ -81,7 +81,7 @@ impl Config {
                 }
             }
         }
-        
+
         anyhow::bail!(
             "Could not find config file. Last error: {}",
             last_error.unwrap_or_else(|| "No search paths".to_string())
@@ -94,7 +94,8 @@ impl Config {
 
     pub fn get_valid_info_indices(&self, region_code: &str) -> Option<HashMap<String, InfoIndex>> {
         self.get_region_config(region_code).map(|config| {
-            config.info_idxs
+            config
+                .info_idxs
                 .iter()
                 .filter(|(_, info)| info.valid)
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -104,7 +105,8 @@ impl Config {
 
     pub fn get_valid_thresholds(&self, region_code: &str) -> Option<HashMap<String, Threshold>> {
         self.get_region_config(region_code).map(|config| {
-            config.thre
+            config
+                .thre
                 .iter()
                 .filter(|(_, threshold)| threshold.valid)
                 .map(|(k, v)| (k.clone(), v.clone()))

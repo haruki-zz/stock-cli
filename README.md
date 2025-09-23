@@ -32,8 +32,9 @@ Global navigation
 - Enter: select / confirm • Esc: back • Ctrl+C: exit
 
 Menu actions
-- Show Filtered — List stocks matching current filters
-  - Table paging: ↓/j and ↑/k scroll; PageDown/PageUp for page; Home/End to jump; Enter/Esc back
+- Show Filtered — Browse stocks matching current filters
+  - ↓/j and ↑/k move the highlight; PageDown/PageUp jump by a page; Home/End jump to first/last row
+  - A detail panel below the table mirrors the highlighted stock; Enter/Esc return to the menu
 - Set Filters — Adjust threshold ranges used for filtering
   - Third-level editor (inline modal):
     - Tab/↑/↓/j/k: switch between Lower and Upper
@@ -51,7 +52,7 @@ Tips
 ## Features
 
 - Async fetching with progress and error handling (Tokio + anyhow)
-- Ratatui-powered TUI with clear, consistent key bindings
+- Ratatui-powered TUI with clear, consistent key bindings and selectable tables
 - CSV persistence with timestamped filenames under `raw_data/`
 - Powerful filtering by configurable thresholds
 - Built-in CSV picker to load past datasets
@@ -59,7 +60,6 @@ Tips
 
 Highlighted structure
 - `src/fetcher.rs` — Async HTTP client and JSON parsing
-- `src/database.rs` — In-memory store, display, filtering, CSV I/O
-- `src/ui/` — Ratatui TUI components (`ratatui_app`, `menu_main`)
-- `src/action.rs` — Encapsulated implementations for menu actions
+- `src/database.rs` — In-memory store, filtering, CSV I/O
+- `src/ui/` — Ratatui components (main menu, CSV picker, thresholds editor, progress, results)
 - `src/app.rs` — App wiring and lifecycle

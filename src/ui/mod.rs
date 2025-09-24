@@ -1,4 +1,5 @@
 // Individual Ratatui screens and helpers exposed to the application layer.
+pub mod chart;
 pub mod csv_picker;
 pub mod main_menu_ratatui;
 pub mod menu_main;

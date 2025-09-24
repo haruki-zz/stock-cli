@@ -87,6 +87,7 @@ impl ChartState {
 pub fn render_chart_panel(
     f: &mut Frame<'_>,
     area: Rect,
+    footer_height: u16,
     chart: &ChartState,
     stock: Option<&crate::fetcher::StockData>,
 ) {
@@ -95,7 +96,7 @@ pub fn render_chart_panel(
         .constraints([
             Constraint::Min(3),
             Constraint::Length(3),
-            Constraint::Length(1),
+            Constraint::Length(footer_height),
         ])
         .split(area);
     let chart_area = Rect {

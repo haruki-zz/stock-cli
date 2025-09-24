@@ -39,6 +39,8 @@ pub fn run_results_table(
 
         let mut capacity: usize = 1;
 
+        let footer_height = if chart_state.show { 2 } else { 1 };
+
         guard.terminal_mut().draw(|f| {
             let area_full = f.size();
             let left_pct = if chart_state.show { 40 } else { 100 };
@@ -63,7 +65,7 @@ pub fn run_results_table(
                 .constraints([
                     Constraint::Min(3),
                     Constraint::Length(3),
-                    Constraint::Length(1),
+                    Constraint::Length(footer_height),
                 ])
                 .split(left_area);
             let table_area = left_chunks[0];
@@ -190,35 +192,51 @@ pub fn run_results_table(
                 f.render_widget(detail, detail_area);
             }
 
-            let footer_text = if total == 0 {
-                "No rows • Esc back".to_string()
-            } else if chart_state.show {
-                format!(
-                    "Row {}/{}  •  Showing {}-{} of {}  •  ↑/↓ move  •  PgUp/PgDn page  •  Home/End jump  •  Enter next timeframe  •  ←/→ change timeframe  •  X close chart  •  Esc back",
-                    selected + 1,
-                    total,
-                    offset + 1,
-                    visible_end,
-                    total
-                )
-            } else {
-                format!(
-                    "Row {}/{}  •  Showing {}-{} of {}  •  ↑/↓ move  •  PgUp/PgDn page  •  Home/End jump  •  Enter view chart  •  Esc back",
-                    selected + 1,
-                    total,
-                    offset + 1,
-                    visible_end,
-                    total
-                )
+        let footer_text = if total == 0 {
+            "No rows • Esc back".to_string()
+        } else if chart_state.show {
+            format!(
+                "Row {}/{} • {}-{} of {} • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter/←/→ timeframe • X close • Esc back",
+                selected + 1,
+                total,
+                offset + 1,
+                visible_end,
+                total
+            )
+        } else {
+            format!(
+                "Row {}/{} • {}-{} of {} • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter chart • Esc back",
+                selected + 1,
+                total,
+                offset + 1,
+                visible_end,
+                total
+            )
+        };
+        // Render footer outside the frame border on the terminal's last line.
+        if footer_area.height > 0 {
+            let last_line_y = area_full.y + area_full.height.saturating_sub(1);
+            let last_line_area = Rect {
+                x: area_full.x,
+                y: last_line_y,
+                width: area_full.width,
+                height: 1,
             };
             f.render_widget(
                 Paragraph::new(footer_text).style(Style::default().fg(Color::Gray)),
-                footer_area,
+                last_line_area,
             );
+        }
 
             if let Some(chart_area) = right_area {
                 let selected_stock = rows_data.get(selected).copied();
-                chart::render_chart_panel(f, chart_area, &chart_state, selected_stock);
+                chart::render_chart_panel(
+                    f,
+                    chart_area,
+                    footer_height as u16,
+                    &chart_state,
+                    selected_stock,
+                );
             }
         })?;
 
@@ -259,10 +277,12 @@ pub fn run_results_table(
                         }
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
-                        if total > 0 && selected + 1 < total {
-                            selected += 1;
+                        if total > 0 {
+                            selected = (selected + 1) % total;
                             if selected >= offset + capacity {
                                 offset = selected + 1 - capacity;
+                            } else if selected < offset {
+                                offset = selected;
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
@@ -272,10 +292,12 @@ pub fn run_results_table(
                         }
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
-                        if total > 0 && selected > 0 {
-                            selected -= 1;
+                        if total > 0 {
+                            selected = selected.checked_sub(1).unwrap_or(total - 1);
                             if selected < offset {
                                 offset = selected;
+                            } else if selected >= offset + capacity {
+                                offset = selected + 1 - capacity;
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::config::Threshold;
 use crate::fetcher::StockData;
 
+/// Minimal container for the in-memory stock snapshot plus persistence helpers.
 pub struct StockDatabase {
     pub data: Vec<StockData>,
 }
@@ -14,6 +15,7 @@ impl StockDatabase {
         Self { data }
     }
 
+    /// Return the codes of stocks whose metrics fall within every active threshold.
     pub fn filter_stocks(&self, thresholds: &HashMap<String, Threshold>) -> Vec<String> {
         self.data
             .iter()
@@ -38,6 +40,7 @@ impl StockDatabase {
         let now: DateTime<Local> = Local::now();
         use std::io::{self, Write};
         let mut out = io::stdout();
+        // Emit a timestamped note so the user sees when the buffer last refreshed.
         let _ = write!(
             out,
             "Stock information is updated on {}.\r\n",
@@ -46,6 +49,7 @@ impl StockDatabase {
         let _ = out.flush();
     }
 
+    /// Persist the current snapshot to disk so it can be reloaded by the CLI later.
     pub fn save_to_csv(&self, file_path: &str) -> Result<()> {
         let mut writer =
             csv::Writer::from_path(file_path).context("Failed to create CSV writer")?;
@@ -84,6 +88,7 @@ impl StockDatabase {
         Ok(())
     }
 
+    /// Load a snapshot produced by `save_to_csv` back into memory.
     pub fn load_from_csv(file_path: &str) -> Result<Self> {
         let mut reader = csv::Reader::from_path(file_path).context("Failed to open CSV file")?;
 

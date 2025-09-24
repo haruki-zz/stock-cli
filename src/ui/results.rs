@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::{database::StockDatabase, ui::TerminalGuard};
 
+/// Display the filtered dataset with a movable cursor and summary panel.
 pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<()> {
     let mut guard = TerminalGuard::new()?;
 
@@ -44,6 +45,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 selected = total - 1;
             }
 
+            // Avoid scrolling past the last chunk of rows when the viewport is shorter than the dataset.
             let max_offset = total.saturating_sub(capacity);
             if offset > max_offset {
                 offset = max_offset;
@@ -85,6 +87,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                         Cell::from(format!("{:.2}", stock.tm)),
                     ]);
                     if offset + i == selected {
+                        // Highlight whichever row the cursor currently points at.
                         row = row.style(Style::default().add_modifier(Modifier::REVERSED));
                     }
                     row
@@ -115,6 +118,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
             .column_spacing(1);
             f.render_widget(table, table_area);
 
+            // Render a compact summary so users can read the highlighted row without horizontal scrolling.
             let detail_text = rows_data
                 .get(selected)
                 .map(|stock| {
@@ -169,6 +173,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                     KeyCode::Down | KeyCode::Char('j') => {
                         if total > 0 && selected + 1 < total {
                             selected += 1;
+                            // Shift the window whenever the cursor steps beyond the visible page.
                             if selected >= offset + capacity {
                                 offset = selected + 1 - capacity;
                             }
@@ -177,6 +182,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                     KeyCode::Up | KeyCode::Char('k') => {
                         if total > 0 && selected > 0 {
                             selected -= 1;
+                            // Pull the viewport upward when the cursor leaves the top of the page.
                             if selected < offset {
                                 offset = selected;
                             }

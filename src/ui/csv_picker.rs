@@ -6,10 +6,12 @@ use std::time::Duration;
 use crate::ui::{utils::list_csv_files, TerminalGuard};
 
 pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
+    // Protect terminal state while the picker owns the screen.
     let mut guard = TerminalGuard::new()?;
 
     let files = list_csv_files(dir);
     if files.is_empty() {
+        // Surface a transient message instead of leaving the user on a blank screen.
         guard.terminal_mut().draw(|f| {
             let size = f.size();
             let block = Paragraph::new("No CSV files in raw_data/. Use 'Refresh Data' to fetch.")
@@ -56,6 +58,7 @@ pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
             if let Event::Key(k) = event::read()? {
                 match k.code {
                     KeyCode::Up | KeyCode::Char('k') => {
+                        // Allow wrap-around navigation for quick top/bottom access.
                         if selected == 0 {
                             selected = files.len() - 1;
                         } else {

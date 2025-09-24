@@ -11,12 +11,14 @@ use crate::{
 pub fn run_thresholds_editor(
     thresholds: &mut std::collections::HashMap<String, Threshold>,
 ) -> Result<()> {
+    // Guard terminal state while the modal editor is active.
     let mut guard = TerminalGuard::new()?;
 
     let mut keys: Vec<String> = thresholds.keys().cloned().collect();
     keys.sort();
     let mut selected = 0usize;
 
+    // The editor either shows the list or a focused edit modal for a single threshold.
     #[derive(Clone)]
     enum Mode {
         List,
@@ -59,6 +61,7 @@ pub fn run_thresholds_editor(
                     ))
                 })
                 .collect();
+            // Append pseudo-items so the user can add a new key or return.
             items_vec.push(ListItem::new("Add filter"));
             items_vec.push(ListItem::new("Back"));
 
@@ -208,6 +211,7 @@ pub fn run_thresholds_editor(
                         let mut fld = *field;
                         match key {
                             KeyCode::Tab | KeyCode::Down | KeyCode::Char('j') => {
+                                // Toggle which numeric field is active.
                                 fld = (fld + 1) % 2;
                             }
                             KeyCode::Up | KeyCode::Char('k') => {
@@ -228,6 +232,7 @@ pub fn run_thresholds_editor(
                                 }
                             }
                             KeyCode::Enter => {
+                                // Parse the buffered input, falling back to the original values when parsing fails.
                                 let lo_v = if lo.is_empty() {
                                     *orig_lower
                                 } else {

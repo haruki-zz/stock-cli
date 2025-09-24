@@ -46,7 +46,7 @@ pub async fn run() -> Result<()> {
     let stock_codes_path = "stock_code.csv";
     let region = "CN";
 
-    // Load configuration
+    // Load configuration and region-specific metadata that drive fetching and filtering.
     let config = Config::load(config_path).context("Failed to load configuration")?;
 
     let region_config = config
@@ -146,7 +146,8 @@ pub async fn run() -> Result<()> {
         // Nothing to redraw here; Ratatui UI will start below
     }
 
-    // Main interactive loop using Ratatui
+    // Main interactive loop using Ratatui. Each menu action owns a dedicated screen so the
+    // core loop can stay focused on state transitions rather than input handling details.
     loop {
         match run_main_menu(loaded_file.as_deref())? {
             MenuAction::Update => {
@@ -180,9 +181,11 @@ pub async fn run() -> Result<()> {
                 }
             }
             MenuAction::SetThresholds => {
+                // Threshold editor mutates the map in-place and returns once the user exits the modal.
                 run_thresholds_editor(&mut thresholds)?;
             }
             MenuAction::Filter => {
+                // Precompute the matching codes; the results view stays read-only.
                 let codes = database.filter_stocks(&thresholds);
                 run_results_table(&database, &codes)?;
             }
@@ -214,6 +217,7 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
+/// Read the first column of the CSV into a list of tradable codes.
 fn load_stock_codes(file_path: &str) -> Result<Vec<String>> {
     if !Path::new(file_path).exists() {
         anyhow::bail!("Stock codes file not found: {}", file_path);

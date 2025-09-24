@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 
+/// Marker error used when the user aborts the fetch mid-flight.
 #[derive(Debug)]
 pub struct FetchCancelled;
 
@@ -28,6 +29,7 @@ pub async fn run_fetch_progress(
     let total = fetcher.total_stocks;
     let handle = tokio::spawn(async move { fetcher.fetch_data().await });
 
+    // Keep terminal raw/alternate state well-scoped to the progress screen.
     let mut guard = TerminalGuard::new()?;
     let mut cancelled = false;
 

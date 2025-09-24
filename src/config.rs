@@ -55,7 +55,7 @@ impl Config {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
 
-        // Try multiple locations for the config file
+        // Try multiple locations for the config file so binaries run from anywhere still pick up config.
         let search_paths = vec![
             path.to_path_buf(),
             std::env::current_exe()
@@ -88,10 +88,12 @@ impl Config {
         )
     }
 
+    /// Retrieve the full region configuration, including disabled entries.
     pub fn get_region_config(&self, region_code: &str) -> Option<&RegionConfig> {
         self.regions.get(region_code)
     }
 
+    /// Return only the `infoIdxs` entries that are marked `valid` for the region.
     pub fn get_valid_info_indices(&self, region_code: &str) -> Option<HashMap<String, InfoIndex>> {
         self.get_region_config(region_code).map(|config| {
             config
@@ -103,6 +105,7 @@ impl Config {
         })
     }
 
+    /// Return the filtering thresholds that are marked as valid for the region.
     pub fn get_valid_thresholds(&self, region_code: &str) -> Option<HashMap<String, Threshold>> {
         self.get_region_config(region_code).map(|config| {
             config

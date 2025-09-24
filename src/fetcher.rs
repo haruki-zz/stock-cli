@@ -10,6 +10,7 @@ use tokio::time::{sleep, Duration};
 use crate::config::{InfoIndex, RegionConfig};
 
 #[derive(Debug, Clone)]
+/// Canonical representation of a single stock row returned by the remote endpoint.
 pub struct StockData {
     pub stock_name: String,
     pub stock_code: String,
@@ -24,6 +25,7 @@ pub struct StockData {
     pub tm: f64,
 }
 
+/// Fetches stock snapshots concurrently while exposing a shared progress counter for the UI.
 pub struct AsyncStockFetcher {
     pub stock_list: Vec<String>,
     pub region_config: RegionConfig,
@@ -57,6 +59,7 @@ impl AsyncStockFetcher {
 
         progress_counter.store(0, Ordering::SeqCst);
 
+        // Fan out the request list while honouring the concurrency guard to stay friendly to the API.
         let results: Vec<Option<StockData>> = stream::iter(self.stock_list.clone().into_iter())
             .map(|stock_code_owned| {
                 let semaphore = Arc::clone(&semaphore);
@@ -147,6 +150,7 @@ impl AsyncStockFetcher {
                                 response.status()
                             );
                         }
+                        // Increase wait time for subsequent attempts to avoid hammering the upstream service.
                         let delay = Duration::from_millis(2_u64.pow(retry_count as u32) * 1000);
                         sleep(delay).await;
                         continue;
@@ -162,6 +166,7 @@ impl AsyncStockFetcher {
                             e
                         );
                     }
+                    // Back off exponentially on transport errors before retrying.
                     let delay = Duration::from_millis(2_u64.pow(retry_count as u32) * 1000);
                     sleep(delay).await;
                     continue;
@@ -179,6 +184,7 @@ impl AsyncStockFetcher {
             .as_array()
             .context("Invalid stock data structure")?;
 
+        // Lazy closures keep the index lookup and type conversion logic uniform across fields.
         let get_string_value = |key: &str| -> Result<String> {
             let idx = self
                 .info_indices

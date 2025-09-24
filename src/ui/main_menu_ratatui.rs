@@ -6,6 +6,7 @@ use std::time::Duration;
 use crate::ui::{menu_main::MenuAction, TerminalGuard};
 
 pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
+    // Ensure raw mode and the alternate screen are always restored regardless of how we exit.
     let mut guard = TerminalGuard::new()?;
 
     let items: Vec<(&str, MenuAction)> = vec![
@@ -62,6 +63,7 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
             match event::read()? {
                 Event::Key(k) => match k.code {
                     KeyCode::Up | KeyCode::Char('k') => {
+                        // Wrap-around navigation keeps the UI snappy for keyboard users.
                         if selected == 0 {
                             selected = items.len() - 1;
                         } else {
@@ -72,6 +74,7 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
                         selected = (selected + 1) % items.len();
                     }
                     KeyCode::Enter => {
+                        // Leave the alternate screen before returning so the caller can print freely.
                         let action = items[selected].1.clone();
                         guard.restore()?;
                         return Ok(action);

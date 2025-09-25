@@ -178,7 +178,17 @@ pub fn render_chart_panel(
                 }
                 let padding = ((y_max - y_min) * 0.05).max(0.01);
                 let y_bounds = [y_min - padding, y_max + padding];
-                let x_bounds = [-0.5, (filtered.len().saturating_sub(1) as f64) + 0.5];
+
+                let draw_series = {
+                    let compressed = compress_to_width(&filtered, chart_area.width);
+                    if compressed.is_empty() {
+                        filtered.clone()
+                    } else {
+                        compressed
+                    }
+                };
+                let series_len = draw_series.len().max(1);
+                let x_bounds = [-0.5, (series_len.saturating_sub(1) as f64) + 0.5];
 
                 let mut highest = &filtered[0];
                 let mut lowest = &filtered[0];
@@ -201,7 +211,7 @@ pub fn render_chart_panel(
                     }
                 }
 
-                let candles = filtered.clone();
+                let candles = draw_series.clone();
                 let canvas = Canvas::default()
                     .block(Block::default().borders(Borders::ALL).title(format!(
                         "{} — {} | {}  (Enter/←/→ cycle • X close)",
@@ -316,4 +326,36 @@ fn filter_history(history: &[Candle], duration: ChronoDuration) -> Vec<Candle> {
     } else {
         filtered
     }
+}
+
+fn compress_to_width(candles: &[Candle], width: u16) -> Vec<Candle> {
+    let max_points = usize::from(width.max(1)) * 2;
+    if candles.len() <= max_points || max_points == 0 {
+        return candles.to_vec();
+    }
+
+    let stride = (candles.len() + max_points - 1) / max_points;
+    let mut reduced = Vec::with_capacity(max_points);
+
+    for chunk in candles.chunks(stride) {
+        if chunk.is_empty() {
+            continue;
+        }
+        let mut aggregated = chunk[0].clone();
+        aggregated.open = chunk.first().unwrap().open;
+        aggregated.close = chunk.last().unwrap().close;
+        aggregated.high = chunk
+            .iter()
+            .map(|c| c.high)
+            .fold(f64::NEG_INFINITY, f64::max);
+        aggregated.low = chunk.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+        aggregated.timestamp = chunk.last().unwrap().timestamp;
+        reduced.push(aggregated);
+    }
+
+    if reduced.len() > max_points {
+        reduced.truncate(max_points);
+    }
+
+    reduced
 }

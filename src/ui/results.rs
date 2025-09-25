@@ -39,34 +39,30 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
 
         guard.terminal_mut().draw(|f| {
             let area_full = f.size();
-            let left_pct = if chart_state.show { 40 } else { 100 };
-            let right_pct = 100 - left_pct;
-            let columns = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(left_pct),
-                    Constraint::Percentage(right_pct),
-                ])
-                .split(area_full);
-
-            let left_area = columns[0];
-            let right_area = if chart_state.show && right_pct > 0 {
-                Some(columns[1])
+            let (list_area, chart_area) = if chart_state.show {
+                let segments = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Percentage(58),
+                        Constraint::Percentage(42),
+                    ])
+                    .split(area_full);
+                (segments[0], Some(segments[1]))
             } else {
-                None
+                (area_full, None)
             };
 
-            let left_chunks = Layout::default()
+            let list_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Min(3),
                     Constraint::Length(3),
                     Constraint::Length(footer_height),
                 ])
-                .split(left_area);
-            let table_area = left_chunks[0];
-            let detail_area = left_chunks[1];
-            let footer_area = left_chunks[2];
+                .split(list_area);
+            let table_area = list_chunks[0];
+            let detail_area = list_chunks[1];
+            let footer_area = list_chunks[2];
 
             capacity = (table_area.height.saturating_sub(3) as usize).max(1);
             let total = rows_data.len();
@@ -209,22 +205,16 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 total
             )
         };
-        // Render footer outside the frame border on the terminal's last line.
         if footer_area.height > 0 {
-            let last_line_y = area_full.y + area_full.height.saturating_sub(1);
-            let last_line_area = Rect {
-                x: area_full.x,
-                y: last_line_y,
-                width: area_full.width,
-                height: 1,
-            };
             f.render_widget(
-                Paragraph::new(footer_text).style(Style::default().fg(Color::Gray)),
-                last_line_area,
+                Paragraph::new(footer_text)
+                    .style(Style::default().fg(Color::Gray))
+                    .wrap(Wrap { trim: true }),
+                footer_area,
             );
         }
 
-            if let Some(chart_area) = right_area {
+            if let Some(chart_area) = chart_area {
                 let selected_stock = rows_data.get(selected).copied();
                 chart::render_chart_panel(
                     f,

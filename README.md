@@ -35,7 +35,7 @@ Menu actions
 - Show Filtered — Browse stocks matching current filters
   - ↓/j and ↑/k move the highlight; PageDown/PageUp jump by a page; Home/End jump to first/last row
   - Press Enter to toggle the inline price chart; ←/→ or Enter cycle across 1Y/6M/3M/1M/1W ranges; X closes the chart
-  - When the chart is open it takes over the right pane and the list collapses to stock name + ticker; Esc returns to the menu
+  - When the chart is open it fills the lower half of the screen and the list collapses to stock name + ticker; Esc returns to the menu
   - The chart header shows timeframe shortcuts; the detail panel lists price/turnover metrics while the chart is visible
 - Set Filters — Adjust threshold ranges used for filtering
   - Third-level editor (inline modal):

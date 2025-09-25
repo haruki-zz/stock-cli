@@ -3,7 +3,7 @@ use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
 use crate::config::Threshold;
-use crate::fetcher::StockData;
+use crate::core::fetcher::StockData;
 
 /// Minimal container for the in-memory stock snapshot plus persistence helpers.
 pub struct StockDatabase {

@@ -1,6 +1,6 @@
 use crate::config::{InfoIndex, RegionConfig};
+use crate::core::fetcher::{AsyncStockFetcher, StockData};
 use crate::database::StockDatabase;
-use crate::fetcher::{AsyncStockFetcher, StockData};
 use crate::ui::{utils::centered_rect, TerminalGuard};
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};

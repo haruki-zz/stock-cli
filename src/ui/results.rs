@@ -10,14 +10,10 @@ use crate::ui::{
 };
 
 /// Display the filtered dataset with a movable cursor, summary panel, and optional chart.
-pub fn run_results_table(
-    database: &StockDatabase,
-    codes: &[String],
-    raw_data_dir: &str,
-) -> Result<()> {
+pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<()> {
     let mut guard = TerminalGuard::new()?;
 
-    let mut rows_data: Vec<&crate::fetcher::StockData> = Vec::new();
+    let mut rows_data: Vec<&crate::core::fetcher::StockData> = Vec::new();
     for code in codes {
         if let Some(stock) = database.data.iter().find(|s| &s.stock_code == code) {
             rows_data.push(stock);
@@ -31,7 +27,7 @@ pub fn run_results_table(
     loop {
         if chart_state.show {
             if let Some(stock) = rows_data.get(selected) {
-                chart_state.prepare_history(raw_data_dir, &stock.stock_code);
+                chart_state.prepare_history(&stock.stock_code);
             } else {
                 chart_state.clear_active();
             }
@@ -249,7 +245,7 @@ pub fn run_results_table(
                             if let Some(stock) = rows_data.get(selected) {
                                 chart_state.show = true;
                                 chart_state.timeframe_index = 0;
-                                chart_state.prepare_history(raw_data_dir, &stock.stock_code);
+                                chart_state.prepare_history(&stock.stock_code);
                             }
                         } else {
                             chart_state.next_timeframe();
@@ -286,7 +282,7 @@ pub fn run_results_table(
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(raw_data_dir, &stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code);
                                 }
                             }
                         }
@@ -301,7 +297,7 @@ pub fn run_results_table(
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(raw_data_dir, &stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code);
                                 }
                             }
                         }
@@ -316,8 +312,7 @@ pub fn run_results_table(
                                 }
                                 if chart_state.show {
                                     if let Some(stock) = rows_data.get(selected) {
-                                        chart_state
-                                            .prepare_history(raw_data_dir, &stock.stock_code);
+                                        chart_state.prepare_history(&stock.stock_code);
                                     }
                                 }
                             }
@@ -333,8 +328,7 @@ pub fn run_results_table(
                                 }
                                 if chart_state.show {
                                     if let Some(stock) = rows_data.get(selected) {
-                                        chart_state
-                                            .prepare_history(raw_data_dir, &stock.stock_code);
+                                        chart_state.prepare_history(&stock.stock_code);
                                     }
                                 }
                             }
@@ -346,7 +340,7 @@ pub fn run_results_table(
                             offset = 0;
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(raw_data_dir, &stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code);
                                 }
                             }
                         }
@@ -357,7 +351,7 @@ pub fn run_results_table(
                             offset = selected.saturating_sub(capacity.saturating_sub(1));
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(raw_data_dir, &stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code);
                                 }
                             }
                         }

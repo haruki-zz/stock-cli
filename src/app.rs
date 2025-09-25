@@ -187,7 +187,7 @@ pub async fn run() -> Result<()> {
             MenuAction::Filter => {
                 // Precompute the matching codes; the results view stays read-only.
                 let codes = database.filter_stocks(&thresholds);
-                run_results_table(&database, &codes, raw_data_dir)?;
+                run_results_table(&database, &codes)?;
             }
             MenuAction::Load => {
                 if let Some(filename) = run_csv_picker(raw_data_dir)? {

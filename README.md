@@ -62,7 +62,8 @@ Tips
 - Unicode-friendly rendering for names and labels
 
 Highlighted structure
-- `src/fetcher.rs` — Async HTTP client and JSON parsing
+- `src/core/fetcher.rs` — Async HTTP client and snapshot parsing
+- `src/core/history.rs` — Daily OHLC downloader used by the chart
 - `src/database.rs` — In-memory store, filtering, CSV I/O
-- `src/ui/` — Ratatui components (main menu, CSV picker, thresholds editor, progress, results)
+- `src/ui/` — Ratatui components (main menu, CSV picker, thresholds editor, progress, results, charts)
 - `src/app.rs` — App wiring and lifecycle

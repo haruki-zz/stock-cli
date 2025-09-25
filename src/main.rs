@@ -1,7 +1,7 @@
 mod app;
 mod config;
+mod core;
 mod database;
-mod fetcher;
 mod ui;
 
 #[tokio::main]

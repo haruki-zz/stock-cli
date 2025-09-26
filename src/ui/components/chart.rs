@@ -9,7 +9,10 @@ use ratatui::{
 };
 use std::{cmp::Ordering, collections::HashMap, sync::mpsc::TryRecvError};
 
-use crate::core::history::{spawn_history_fetch, Candle, HistoryReceiver};
+use crate::services::{
+    history::{spawn_history_fetch, Candle, HistoryReceiver},
+    StockData,
+};
 
 const TIMEFRAMES: &[(&str, ChronoDuration)] = &[
     ("1Y", ChronoDuration::weeks(52)),
@@ -117,7 +120,7 @@ pub fn render_chart_panel(
     area: Rect,
     footer_height: u16,
     chart: &ChartState,
-    stock: Option<&crate::core::fetcher::StockData>,
+    stock: Option<&StockData>,
 ) {
     let segments = Layout::default()
         .direction(Direction::Vertical)

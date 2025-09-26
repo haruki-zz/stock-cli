@@ -1,16 +1,21 @@
 use anyhow::{Context, Result};
+use crossterm::{
+    cursor,
+    terminal::{self, ClearType},
+    QueueableCommand,
+};
 use std::fs;
 use std::io;
 use std::path::Path;
 
 use crate::config::Config;
-use crate::database::StockDatabase;
-use crate::ui::menu_main::MenuAction;
+use crate::storage::StockDatabase;
 use crate::ui::{
     run_csv_picker, run_fetch_progress, run_main_menu, run_results_table, run_thresholds_editor,
-    FetchCancelled,
+    FetchCancelled, MenuAction,
 };
-// Find latest CSV in directory
+
+/// Find the most recently modified CSV file within the given directory.
 fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
     let entries = std::fs::read_dir(dir).ok()?;
     let mut latest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
@@ -35,11 +40,6 @@ fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
         (p, name)
     })
 }
-use crossterm::{
-    cursor,
-    terminal::{self, ClearType},
-    QueueableCommand,
-};
 
 pub async fn run() -> Result<()> {
     let config_path = "config.json";

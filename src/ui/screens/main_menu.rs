@@ -3,7 +3,17 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
-use crate::ui::{menu_main::MenuAction, TerminalGuard};
+use crate::ui::TerminalGuard;
+
+/// Logical actions triggered from the main menu screen.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MenuAction {
+    Update,
+    SetThresholds,
+    Filter,
+    Load,
+    Exit,
+}
 
 pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
     // Ensure raw mode and the alternate screen are always restored regardless of how we exit.

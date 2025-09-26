@@ -3,7 +3,7 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
-use crate::ui::{utils::list_csv_files, TerminalGuard};
+use crate::ui::{components::utils::list_csv_files, TerminalGuard};
 
 pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
     // Protect terminal state while the picker owns the screen.

@@ -3,9 +3,10 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
-use crate::database::StockDatabase;
+use crate::services::StockData;
+use crate::storage::StockDatabase;
 use crate::ui::{
-    chart::{self, ChartState},
+    components::chart::{self, ChartState},
     TerminalGuard,
 };
 
@@ -13,7 +14,7 @@ use crate::ui::{
 pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<()> {
     let mut guard = TerminalGuard::new()?;
 
-    let mut rows_data: Vec<&crate::core::fetcher::StockData> = Vec::new();
+    let mut rows_data: Vec<&StockData> = Vec::new();
     for code in codes {
         if let Some(stock) = database.data.iter().find(|s| &s.stock_code == code) {
             rows_data.push(stock);

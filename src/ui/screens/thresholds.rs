@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::{
     config::Threshold,
-    ui::{utils::centered_rect, TerminalGuard},
+    ui::{components::utils::centered_rect, TerminalGuard},
 };
 
 pub fn run_thresholds_editor(

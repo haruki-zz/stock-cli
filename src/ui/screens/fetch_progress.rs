@@ -1,7 +1,7 @@
 use crate::config::{InfoIndex, RegionConfig};
-use crate::core::fetcher::{AsyncStockFetcher, StockData};
-use crate::database::StockDatabase;
-use crate::ui::{utils::centered_rect, TerminalGuard};
+use crate::services::{AsyncStockFetcher, StockData};
+use crate::storage::StockDatabase;
+use crate::ui::{components::utils::centered_rect, TerminalGuard};
 use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};

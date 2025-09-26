@@ -3,7 +3,7 @@ use ratatui::{
     prelude::*,
     symbols::Marker,
     widgets::{
-        canvas::{Canvas, Line as CanvasLine, Rectangle},
+        canvas::{Canvas, Line, Rectangle},
         Block, Borders, Paragraph, Wrap,
     },
 };
@@ -20,6 +20,9 @@ const TIMEFRAMES: &[(&str, ChronoDuration)] = &[
 ];
 
 const BODY_EPSILON: f64 = 1e-4;
+const DATE_LABEL_FMT: &str = "%Y-%m-%d";
+const DATE_LABEL_FMT_SHORT: &str = "%m-%d";
+const DATE_LABEL_FMT_MEDIUM: &str = "%Y-%m";
 
 /// Tracks chart state and caches per-stock historical data.
 #[derive(Default)]
@@ -176,9 +179,6 @@ pub fn render_chart_panel(
                         y_max = candle.high;
                     }
                 }
-                let padding = ((y_max - y_min) * 0.05).max(0.01);
-                let y_bounds = [y_min - padding, y_max + padding];
-
                 let draw_series = {
                     let compressed = compress_to_width(&filtered, chart_area.width);
                     if compressed.is_empty() {
@@ -188,7 +188,64 @@ pub fn render_chart_panel(
                     }
                 };
                 let series_len = draw_series.len().max(1);
-                let x_bounds = [-0.5, (series_len.saturating_sub(1) as f64) + 0.5];
+                let width_px = chart_area.width.max(1) as f64;
+                let height_px = chart_area.height.max(1) as f64;
+
+                let left_margin = 7.0;
+                let right_margin = 1.0;
+                let top_margin = 1.0;
+                let bottom_margin = 1.0;
+
+                let axis_x = left_margin;
+                let available_width = (width_px - left_margin - right_margin).max(1.0);
+                let x_scale = if series_len > 1 {
+                    available_width / (series_len.saturating_sub(1) as f64)
+                } else {
+                    0.0
+                };
+                let base_width = if series_len > 1 {
+                    x_scale
+                } else {
+                    available_width
+                };
+                let half_body = (base_width * 0.35).clamp(0.03, 0.3);
+                let half_wick = half_body.min(0.2).max(0.03);
+                let axis_x_end = axis_x + available_width;
+                let axis_tick_length_x = 4.0;
+
+                let axis_y = bottom_margin;
+                let available_height = (height_px - bottom_margin - top_margin).max(1.0);
+                let price_range = (y_max - y_min).max(0.01);
+                let price_scale = available_height / price_range;
+                let axis_y_top = axis_y + available_height;
+
+                let x_bounds = [0.0, width_px];
+                let y_bounds = [-1.0, height_px];
+
+                let y_tick_gap = 0.2;
+                let y_tick_start = axis_x - y_tick_gap;
+                let price_label_x = y_tick_start - axis_tick_length_x - 1.2;
+                let price_tick_values = compute_price_ticks(y_min, y_min + price_range, 9)
+                    .into_iter()
+                    .filter(|value| value.is_finite())
+                    .map(|value| {
+                        let rounded = ((value * 100.0).round()) / 100.0;
+                        (value, format!("{:.2}", rounded))
+                    })
+                    .fold(Vec::new(), |mut acc: Vec<(f64, String)>, (value, label)| {
+                        if !acc
+                            .iter()
+                            .any(|(existing, _)| (existing - value).abs() < 1e-6)
+                        {
+                            acc.push((value, label));
+                        }
+                        acc
+                    });
+
+                let date_tick_positions = compute_date_ticks(&draw_series, 7)
+                    .into_iter()
+                    .map(|(idx, label)| (axis_x + idx as f64 * x_scale, label))
+                    .collect::<Vec<_>>();
 
                 let mut highest = &filtered[0];
                 let mut lowest = &filtered[0];
@@ -211,6 +268,8 @@ pub fn render_chart_panel(
                     }
                 }
 
+                let price_tick_values = price_tick_values;
+                let date_tick_positions = date_tick_positions;
                 let candles = draw_series.clone();
                 let canvas = Canvas::default()
                     .block(Block::default().borders(Borders::ALL).title(format!(
@@ -221,41 +280,74 @@ pub fn render_chart_panel(
                     .x_bounds(x_bounds)
                     .y_bounds(y_bounds)
                     .paint(move |ctx| {
+                        let axis_color = Color::DarkGray;
                         for (idx, candle) in candles.iter().enumerate() {
-                            let x = idx as f64;
+                            let x = axis_x + (idx as f64) * x_scale;
+                            let low = axis_y + (candle.low - y_min) * price_scale;
+                            let high = axis_y + (candle.high - y_min) * price_scale;
+                            let open = axis_y + (candle.open - y_min) * price_scale;
+                            let close = axis_y + (candle.close - y_min) * price_scale;
                             let color = if candle.close >= candle.open {
                                 Color::Green
                             } else {
                                 Color::Red
                             };
 
-                            ctx.draw(&CanvasLine {
+                            ctx.draw(&Line {
                                 x1: x,
-                                y1: candle.low,
+                                y1: low,
                                 x2: x,
-                                y2: candle.high,
+                                y2: high,
                                 color,
                             });
 
-                            let body_top = candle.open.max(candle.close);
-                            let body_bottom = candle.open.min(candle.close);
+                            let body_top = open.max(close);
+                            let body_bottom = open.min(close);
                             if (body_top - body_bottom).abs() < BODY_EPSILON {
-                                ctx.draw(&CanvasLine {
-                                    x1: x - 0.3,
+                                ctx.draw(&Line {
+                                    x1: x - half_wick,
                                     y1: body_top,
-                                    x2: x + 0.3,
+                                    x2: x + half_wick,
                                     y2: body_top,
                                     color,
                                 });
                             } else {
                                 ctx.draw(&Rectangle {
-                                    x: x - 0.3,
+                                    x: x - half_body,
                                     y: body_bottom,
-                                    width: 0.6,
+                                    width: half_body * 2.0,
                                     height: body_top - body_bottom,
                                     color,
                                 });
                             }
+                        }
+
+                        ctx.layer();
+                        ctx.draw(&Line {
+                            x1: axis_x,
+                            y1: axis_y,
+                            x2: axis_x_end,
+                            y2: axis_y,
+                            color: axis_color,
+                        });
+                        ctx.draw(&Line {
+                            x1: axis_x,
+                            y1: axis_y,
+                            x2: axis_x,
+                            y2: axis_y_top,
+                            color: axis_color,
+                        });
+
+                        for (value, label) in price_tick_values.iter() {
+                            let coord = axis_y + (value - y_min) * price_scale;
+                            if coord < axis_y - 0.001 || coord > axis_y_top + 0.001 {
+                                continue;
+                            }
+                            ctx.print(price_label_x, coord, label.clone());
+                        }
+
+                        for (x_pos, label) in date_tick_positions.iter() {
+                            ctx.print(*x_pos, -1.0, label.clone());
                         }
                     });
 
@@ -358,4 +450,74 @@ fn compress_to_width(candles: &[Candle], width: u16) -> Vec<Candle> {
     }
 
     reduced
+}
+
+fn compute_price_ticks(min: f64, max: f64, desired: usize) -> Vec<f64> {
+    let desired = desired.max(2);
+    if !min.is_finite() || !max.is_finite() {
+        return vec![0.0, 1.0];
+    }
+
+    let mut effective_min = min;
+    let mut effective_max = max.max(effective_min + f64::EPSILON);
+
+    if (effective_max - effective_min).abs() < 1e-6 {
+        let span = if effective_min.abs() < 1.0 {
+            1.0
+        } else {
+            effective_min.abs() * 0.05
+        };
+        effective_min -= span / 2.0;
+        effective_max += span / 2.0;
+    }
+
+    let step = (effective_max - effective_min) / (desired as f64 - 1.0);
+    (0..desired)
+        .map(|i| effective_min + step * i as f64)
+        .collect()
+}
+
+fn compute_date_ticks(candles: &[Candle], desired: usize) -> Vec<(usize, String)> {
+    if candles.is_empty() {
+        return Vec::new();
+    }
+
+    let last_index = candles.len() - 1;
+    if last_index == 0 {
+        return vec![(0, candles[0].timestamp.format(DATE_LABEL_FMT).to_string())];
+    }
+
+    let desired = desired.max(2).min(candles.len());
+    let step = (last_index as f64) / (desired.saturating_sub(1) as f64);
+    let mut indices: Vec<usize> = (0..desired)
+        .map(|i| ((i as f64 * step).round() as usize).min(last_index))
+        .collect();
+    indices.push(0);
+    indices.push(last_index);
+    indices.sort_unstable();
+    indices.dedup();
+
+    let first_ts = candles.first().unwrap().timestamp;
+    let last_ts = candles.last().unwrap().timestamp;
+    let total_days = (last_ts.date_naive() - first_ts.date_naive())
+        .num_days()
+        .abs();
+    let mid_format = if total_days > 365 {
+        DATE_LABEL_FMT_MEDIUM
+    } else {
+        DATE_LABEL_FMT_SHORT
+    };
+
+    indices
+        .into_iter()
+        .map(|idx| {
+            let ts = candles[idx].timestamp;
+            let label = if idx == 0 || idx == last_index {
+                ts.format(DATE_LABEL_FMT).to_string()
+            } else {
+                ts.format(mid_format).to_string()
+            };
+            (idx, label)
+        })
+        .collect()
 }

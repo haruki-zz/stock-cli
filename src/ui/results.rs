@@ -43,8 +43,8 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 let segments = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
-                        Constraint::Percentage(58),
-                        Constraint::Percentage(42),
+                        Constraint::Percentage(40),
+                        Constraint::Percentage(60),
                     ])
                     .split(area_full);
                 (segments[0], Some(segments[1]))
@@ -54,15 +54,10 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
 
             let list_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(3),
-                    Constraint::Length(3),
-                    Constraint::Length(footer_height),
-                ])
+                .constraints([Constraint::Min(3), Constraint::Length(footer_height)])
                 .split(list_area);
             let table_area = list_chunks[0];
-            let detail_area = list_chunks[1];
-            let footer_area = list_chunks[2];
+            let footer_area = list_chunks[1];
 
             capacity = (table_area.height.saturating_sub(3) as usize).max(1);
             let total = rows_data.len();
@@ -82,26 +77,20 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 .iter()
                 .enumerate()
                 .map(|(i, stock)| {
-                    let cells = if chart_state.show {
-                        vec![
-                            Cell::from(stock.stock_name.clone()),
-                            Cell::from(stock.stock_code.clone()),
-                        ]
-                    } else {
-                        vec![
-                            Cell::from(stock.stock_name.clone()),
-                            Cell::from(stock.stock_code.clone()),
-                            Cell::from(format!("{:.2}", stock.curr)),
-                            Cell::from(format!("{:.2}", stock.prev_closed)),
-                            Cell::from(format!("{:.2}", stock.open)),
-                            Cell::from(format!("{:.2}", stock.increase)),
-                            Cell::from(format!("{:.2}", stock.highest)),
-                            Cell::from(format!("{:.2}", stock.lowest)),
-                            Cell::from(format!("{:.2}", stock.turn_over)),
-                            Cell::from(format!("{:.2}", stock.amp)),
-                            Cell::from(format!("{:.2}", stock.tm)),
-                        ]
-                    };
+                    let cells = vec![
+                        Cell::from(stock.stock_name.clone()),
+                        Cell::from(stock.stock_code.clone()),
+                        Cell::from("│"),
+                        Cell::from(format!("{:.2}", stock.curr)),
+                        Cell::from(format!("{:.2}", stock.prev_closed)),
+                        Cell::from(format!("{:.2}", stock.open)),
+                        Cell::from(format!("{:.2}", stock.increase)),
+                        Cell::from(format!("{:.2}", stock.highest)),
+                        Cell::from(format!("{:.2}", stock.lowest)),
+                        Cell::from(format!("{:.2}", stock.turn_over)),
+                        Cell::from(format!("{:.2}", stock.amp)),
+                        Cell::from(format!("{:.2}", stock.tm)),
+                    ];
                     let mut row = Row::new(cells);
                     if offset + i == selected {
                         row = row.style(Style::default().add_modifier(Modifier::REVERSED));
@@ -110,79 +99,50 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 })
                 .collect::<Vec<_>>();
 
-            let (header, widths, rows_iter) = if chart_state.show {
-                let header = Row::new(vec![Cell::from("Stock Name"), Cell::from("Code")])
-                    .style(Style::default().fg(Color::Yellow));
-                let widths = vec![Constraint::Length(22), Constraint::Length(12)];
-                (header, widths, base_rows)
-            } else {
-                let header = Row::new(
-                    [
-                        "Stock Name",
-                        "Code",
-                        "Curr",
-                        "Prev",
-                        "Open",
-                        "Inc",
-                        "High",
-                        "Low",
-                        "Turn",
-                        "Amp",
-                        "TM",
-                    ]
-                    .into_iter()
-                    .map(Cell::from)
-                    .collect::<Vec<_>>(),
-                )
-                .style(Style::default().fg(Color::Yellow));
-                let widths = vec![
-                    Constraint::Length(16),
-                    Constraint::Length(8),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                    Constraint::Length(7),
-                ];
-                (header, widths, base_rows)
-            };
+            let header = Row::new(
+                [
+                    "Stock Name",
+                    "Code",
+                    "",
+                    "Curr",
+                    "Prev",
+                    "Open",
+                    "Inc",
+                    "High",
+                    "Low",
+                    "Turn",
+                    "Amp",
+                    "TM",
+                ]
+                .into_iter()
+                .map(Cell::from)
+                .collect::<Vec<_>>(),
+            )
+            .style(Style::default().fg(Color::Yellow));
+            let widths = vec![
+                Constraint::Length(14),
+                Constraint::Length(8),
+                Constraint::Length(3),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+                Constraint::Length(7),
+            ];
 
-            let table = Table::new(rows_iter, widths)
+            let table = Table::new(base_rows, widths)
                 .header(header)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
                     .title(format!("Filtered Results ({} rows)", total)),
             )
-            .column_spacing(1);
+            .column_spacing(0);
             f.render_widget(table, table_area);
-
-            if chart_state.show {
-                let detail_text = rows_data
-                    .get(selected)
-                    .map(|stock| {
-                        format!(
-                            "Curr: {:.2}  Prev: {:.2}  Open: {:.2}  Inc: {:.2}\nHigh: {:.2}  Low: {:.2}  Turn: {:.2}  Amp: {:.2}  TM: {:.2}",
-                            stock.curr,
-                            stock.prev_closed,
-                            stock.open,
-                            stock.increase,
-                            stock.highest,
-                            stock.lowest,
-                            stock.turn_over,
-                            stock.amp,
-                            stock.tm
-                        )
-                    })
-                    .unwrap_or_else(|| "No rows".to_string());
-                let detail = Paragraph::new(detail_text)
-                    .block(Block::default().borders(Borders::ALL).title("Selected"));
-                f.render_widget(detail, detail_area);
-            }
 
         let footer_text = if total == 0 {
             "No rows • Esc back".to_string()

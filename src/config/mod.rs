@@ -104,16 +104,4 @@ impl Config {
                 .collect()
         })
     }
-
-    /// Return the filtering thresholds that are marked as valid for the region.
-    pub fn get_valid_thresholds(&self, region_code: &str) -> Option<HashMap<String, Threshold>> {
-        self.get_region_config(region_code).map(|config| {
-            config
-                .thre
-                .iter()
-                .filter(|(_, threshold)| threshold.valid)
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()
-        })
-    }
 }

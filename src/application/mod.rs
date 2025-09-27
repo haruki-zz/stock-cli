@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 
 use crate::config::Config;
-use crate::storage::StockDatabase;
+use crate::storage::{ensure_metric_thresholds, StockDatabase};
 use crate::ui::{
     run_csv_picker, run_fetch_progress, run_main_menu, run_results_table, run_thresholds_editor,
     FetchCancelled, MenuAction,
@@ -58,7 +58,8 @@ pub async fn run() -> Result<()> {
         .get_valid_info_indices(region)
         .context("No valid info indices found")?;
 
-    let mut thresholds = config.get_valid_thresholds(region).unwrap_or_default();
+    let mut thresholds = region_config.thre.clone();
+    ensure_metric_thresholds(&mut thresholds);
 
     // Load stock codes
     let stock_codes = load_stock_codes(stock_codes_path)?;

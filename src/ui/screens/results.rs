@@ -105,15 +105,15 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                     "Stock Name",
                     "Code",
                     "",
-                    "Curr",
-                    "Prev",
-                    "Open",
-                    "Inc",
-                    "High",
-                    "Low",
-                    "Turn",
-                    "Amp",
-                    "TM",
+                    "Last Price",
+                    "Prev Close",
+                    "Open Price",
+                    "Change (%)",
+                    "Day High",
+                    "Day Low",
+                    "Turnover",
+                    "Amplitude",
+                    "Total Market",
                 ]
                 .into_iter()
                 .map(Cell::from)
@@ -121,18 +121,18 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
             )
             .style(Style::default().fg(Color::Yellow));
             let widths = vec![
-                Constraint::Length(14),
-                Constraint::Length(8),
+                Constraint::Length(18),
+                Constraint::Length(10),
                 Constraint::Length(3),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
-                Constraint::Length(7),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(14),
             ];
 
             let table = Table::new(base_rows, widths)

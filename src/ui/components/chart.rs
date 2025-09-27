@@ -214,7 +214,7 @@ pub fn render_chart_panel(
                 let half_body = (base_width * 0.35).clamp(0.03, 0.3);
                 let half_wick = half_body.min(0.2).max(0.03);
                 let axis_x_end = axis_x + available_width;
-                let axis_tick_length_x = 4.0;
+                let axis_tick_length_x = 5.0;
 
                 let axis_y = bottom_margin;
                 let available_height = (height_px - bottom_margin - top_margin).max(1.0);
@@ -357,7 +357,7 @@ pub fn render_chart_panel(
                 f.render_widget(canvas, chart_area);
 
                 help_text = format!(
-                    "{} • {} sessions {}→{} • High {:.2} on {} • Low {:.2} on {}",
+                    "{} • {} sessions • {} -> {} • High {:.2} on {} • Low {:.2} on {}",
                     label,
                     filtered.len(),
                     first.timestamp.format("%Y-%m-%d"),

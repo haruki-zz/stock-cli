@@ -5,6 +5,32 @@ use std::collections::HashMap;
 use crate::config::Threshold;
 use crate::services::StockData;
 
+/// Key/label pairs for all numeric metrics that can be filtered by thresholds.
+pub const FILTERABLE_METRICS: &[(&str, &str)] = &[
+    ("curr", "Last Price"),
+    ("prevClosed", "Previous Close"),
+    ("open", "Open"),
+    ("increase", "Change (%)"),
+    ("highest", "Intraday High"),
+    ("lowest", "Intraday Low"),
+    ("turnOver", "Turnover"),
+    ("amp", "Amplitude"),
+    ("tm", "TM"),
+];
+
+/// Ensure every expected metric has a threshold entry so the editor can expose it.
+pub fn ensure_metric_thresholds(thresholds: &mut HashMap<String, Threshold>) {
+    for (key, _) in FILTERABLE_METRICS {
+        thresholds
+            .entry((*key).to_string())
+            .or_insert_with(|| Threshold {
+                lower: 0.0,
+                upper: 0.0,
+                valid: false,
+            });
+    }
+}
+
 /// Minimal container for the in-memory stock snapshot plus persistence helpers.
 pub struct StockDatabase {
     pub data: Vec<StockData>,
@@ -20,16 +46,13 @@ impl StockDatabase {
         self.data
             .iter()
             .filter(|stock| {
-                thresholds.iter().all(|(metric, threshold)| {
-                    let value = match metric.as_str() {
-                        "amp" => stock.amp,
-                        "turnOver" => stock.turn_over,
-                        "tm" => stock.tm,
-                        "increase" => stock.increase,
-                        _ => return true, // Unknown metric, skip filter
-                    };
-                    value >= threshold.lower && value <= threshold.upper
-                })
+                thresholds
+                    .iter()
+                    .filter(|(_, threshold)| threshold.valid)
+                    .all(|(metric, threshold)| match metric_value(stock, metric) {
+                        Some(value) => value >= threshold.lower && value <= threshold.upper,
+                        None => true,
+                    })
             })
             .map(|stock| stock.stock_code.clone())
             .collect()
@@ -115,5 +138,20 @@ impl StockDatabase {
         }
 
         Ok(Self::new(data))
+    }
+}
+
+fn metric_value(stock: &StockData, metric: &str) -> Option<f64> {
+    match metric {
+        "curr" => Some(stock.curr),
+        "prevClosed" => Some(stock.prev_closed),
+        "open" => Some(stock.open),
+        "increase" => Some(stock.increase),
+        "highest" => Some(stock.highest),
+        "lowest" => Some(stock.lowest),
+        "turnOver" => Some(stock.turn_over),
+        "amp" => Some(stock.amp),
+        "tm" => Some(stock.tm),
+        _ => None,
     }
 }

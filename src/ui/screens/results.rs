@@ -10,16 +10,184 @@ use crate::ui::{
     TerminalGuard,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SortField {
+    LastPrice,
+    PrevClose,
+    OpenPrice,
+    Change,
+    DayHigh,
+    DayLow,
+    Turnover,
+    Amplitude,
+    TotalMarket,
+}
+
+impl SortField {
+    const ALL: [SortField; 9] = [
+        SortField::LastPrice,
+        SortField::PrevClose,
+        SortField::OpenPrice,
+        SortField::Change,
+        SortField::DayHigh,
+        SortField::DayLow,
+        SortField::Turnover,
+        SortField::Amplitude,
+        SortField::TotalMarket,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            SortField::LastPrice => "Last Price",
+            SortField::PrevClose => "Prev Close",
+            SortField::OpenPrice => "Open Price",
+            SortField::Change => "Change (%)",
+            SortField::DayHigh => "Day High",
+            SortField::DayLow => "Day Low",
+            SortField::Turnover => "Turnover",
+            SortField::Amplitude => "Amplitude",
+            SortField::TotalMarket => "Total Market",
+        }
+    }
+
+    fn next(self) -> Self {
+        let idx = Self::ALL
+            .iter()
+            .position(|field| *field == self)
+            .unwrap_or(0);
+        let next_idx = (idx + 1) % Self::ALL.len();
+        Self::ALL[next_idx]
+    }
+
+    fn compare(self, a: &StockData, b: &StockData) -> std::cmp::Ordering {
+        match self {
+            SortField::LastPrice => cmp_f64(a.curr, b.curr),
+            SortField::PrevClose => cmp_f64(a.prev_closed, b.prev_closed),
+            SortField::OpenPrice => cmp_f64(a.open, b.open),
+            SortField::Change => cmp_f64(a.increase, b.increase),
+            SortField::DayHigh => cmp_f64(a.highest, b.highest),
+            SortField::DayLow => cmp_f64(a.lowest, b.lowest),
+            SortField::Turnover => cmp_f64(a.turn_over, b.turn_over),
+            SortField::Amplitude => cmp_f64(a.amp, b.amp),
+            SortField::TotalMarket => cmp_f64(a.tm, b.tm),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SortState {
+    field: SortField,
+    descending: bool,
+}
+
+impl SortState {
+    fn new() -> Self {
+        Self {
+            field: SortField::LastPrice,
+            descending: true,
+        }
+    }
+
+    fn cycle_field(&mut self) {
+        self.field = self.field.next();
+    }
+
+    fn toggle_direction(&mut self) {
+        self.descending = !self.descending;
+    }
+
+    fn direction_icon(self) -> &'static str {
+        if self.descending {
+            "↓"
+        } else {
+            "↑"
+        }
+    }
+}
+
+fn cmp_f64(a: f64, b: f64) -> std::cmp::Ordering {
+    a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal)
+}
+
+fn build_sorted_rows<'a>(
+    database: &'a StockDatabase,
+    codes: &[String],
+    sort: SortState,
+) -> Vec<&'a StockData> {
+    let mut rows: Vec<&StockData> = codes
+        .iter()
+        .filter_map(|code| database.data.iter().find(|s| &s.stock_code == code))
+        .collect();
+
+    rows.sort_by(|a, b| {
+        use std::cmp::Ordering;
+
+        let primary = sort.field.compare(a, b);
+        let ord = if primary == Ordering::Equal {
+            a.stock_code.cmp(&b.stock_code)
+        } else {
+            primary
+        };
+        if sort.descending {
+            ord.reverse()
+        } else {
+            ord
+        }
+    });
+
+    rows
+}
+
+fn rebuild_sorted_rows<'a>(
+    database: &'a StockDatabase,
+    codes: &[String],
+    sort_state: SortState,
+    current_code: Option<String>,
+    selected: &mut usize,
+    offset: &mut usize,
+    capacity: usize,
+    chart_state: &mut ChartState,
+) -> Vec<&'a StockData> {
+    let rows = build_sorted_rows(database, codes, sort_state);
+
+    if let Some(code) = current_code {
+        if let Some(idx) = rows.iter().position(|s| s.stock_code == code) {
+            *selected = idx;
+        } else if !rows.is_empty() {
+            *selected = (*selected).min(rows.len() - 1);
+        } else {
+            *selected = 0;
+        }
+    } else if !rows.is_empty() {
+        *selected = (*selected).min(rows.len() - 1);
+    } else {
+        *selected = 0;
+    }
+
+    if *selected >= *offset + capacity {
+        *offset = selected.saturating_sub(capacity.saturating_sub(1));
+    }
+    if *selected < *offset {
+        *offset = *selected;
+    }
+
+    if chart_state.show {
+        if let Some(stock) = rows.get(*selected) {
+            chart_state.prepare_history(&stock.stock_code);
+        } else {
+            chart_state.clear_active();
+        }
+    }
+
+    rows
+}
+
 /// Display the filtered dataset with a movable cursor, summary panel, and optional chart.
 pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<()> {
     let mut guard = TerminalGuard::new()?;
 
-    let mut rows_data: Vec<&StockData> = Vec::new();
-    for code in codes {
-        if let Some(stock) = database.data.iter().find(|s| &s.stock_code == code) {
-            rows_data.push(stock);
-        }
-    }
+    let mut sort_state = SortState::new();
+    let mut rows_data = build_sorted_rows(database, codes, sort_state);
 
     let mut offset: usize = 0;
     let mut selected: usize = 0;
@@ -100,26 +268,37 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 })
                 .collect::<Vec<_>>();
 
-            let header = Row::new(
-                [
-                    "Stock Name",
-                    "Code",
-                    "",
-                    "Last Price",
-                    "Prev Close",
-                    "Open Price",
-                    "Change (%)",
-                    "Day High",
-                    "Day Low",
-                    "Turnover",
-                    "Amplitude",
-                    "Total Market",
-                ]
-                .into_iter()
-                .map(Cell::from)
-                .collect::<Vec<_>>(),
-            )
-            .style(Style::default().fg(Color::Yellow));
+            let header_columns: [(&str, Option<SortField>); 12] = [
+                ("Stock Name", None),
+                ("Code", None),
+                ("", None),
+                ("Last Price", Some(SortField::LastPrice)),
+                ("Prev Close", Some(SortField::PrevClose)),
+                ("Open Price", Some(SortField::OpenPrice)),
+                ("Change (%)", Some(SortField::Change)),
+                ("Day High", Some(SortField::DayHigh)),
+                ("Day Low", Some(SortField::DayLow)),
+                ("Turnover", Some(SortField::Turnover)),
+                ("Amplitude", Some(SortField::Amplitude)),
+                ("Total Market", Some(SortField::TotalMarket)),
+            ];
+
+            let header_cells: Vec<Cell> = header_columns
+                .iter()
+                .map(|(label, field)| {
+                    let mut content = (*label).to_string();
+                    if field.map(|f| f == sort_state.field).unwrap_or(false) {
+                        content.push(' ');
+                        content.push_str(sort_state.direction_icon());
+                        Cell::from(content)
+                            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+                    } else {
+                        Cell::from(content).style(Style::default().fg(Color::Yellow))
+                    }
+                })
+                .collect();
+
+            let header = Row::new(header_cells);
             let widths = vec![
                 Constraint::Length(18),
                 Constraint::Length(10),
@@ -146,24 +325,32 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
             f.render_widget(table, table_area);
 
         let footer_text = if total == 0 {
-            "No rows • Esc back".to_string()
+            format!(
+                "No rows • Sort: {} {} • s next • d flip • Esc back",
+                sort_state.field.label(),
+                sort_state.direction_icon()
+            )
         } else if chart_state.show {
             format!(
-                "Row {}/{} • {}-{} of {} • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter/←/→ timeframe • X close • Esc back",
+                "Row {}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter/←/→ timeframe • X close • Esc back",
                 selected + 1,
                 total,
                 offset + 1,
                 visible_end,
-                total
+                total,
+                sort_state.field.label(),
+                sort_state.direction_icon()
             )
         } else {
             format!(
-                "Row {}/{} • {}-{} of {} • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter chart • Esc back",
+                "Row {}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter chart • Esc back",
                 selected + 1,
                 total,
                 offset + 1,
                 visible_end,
-                total
+                total,
+                sort_state.field.label(),
+                sort_state.direction_icon()
             )
         };
         if footer_area.height > 0 {
@@ -212,6 +399,38 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                     }
                     KeyCode::Char('x') => {
                         chart_state.hide();
+                    }
+                    KeyCode::Char('s') => {
+                        let current_code = rows_data
+                            .get(selected)
+                            .map(|stock| stock.stock_code.clone());
+                        sort_state.cycle_field();
+                        rows_data = rebuild_sorted_rows(
+                            database,
+                            codes,
+                            sort_state,
+                            current_code,
+                            &mut selected,
+                            &mut offset,
+                            capacity,
+                            &mut chart_state,
+                        );
+                    }
+                    KeyCode::Char('d') => {
+                        let current_code = rows_data
+                            .get(selected)
+                            .map(|stock| stock.stock_code.clone());
+                        sort_state.toggle_direction();
+                        rows_data = rebuild_sorted_rows(
+                            database,
+                            codes,
+                            sort_state,
+                            current_code,
+                            &mut selected,
+                            &mut offset,
+                            capacity,
+                            &mut chart_state,
+                        );
                     }
                     KeyCode::Right => {
                         if chart_state.show {

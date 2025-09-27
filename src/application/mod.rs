@@ -42,12 +42,11 @@ fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
 }
 
 pub async fn run() -> Result<()> {
-    let config_path = "config.json";
     let stock_codes_path = "stock_code.csv";
     let region = "CN";
 
     // Load configuration and region-specific metadata that drive fetching and filtering.
-    let config = Config::load(config_path).context("Failed to load configuration")?;
+    let config = Config::builtin();
 
     let region_config = config
         .get_region_config(region)

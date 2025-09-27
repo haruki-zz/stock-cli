@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build a macOS Intel (x86_64) release binary and package it
-# with config.json and stock_code.csv into a tar.gz.
+# with stock_code.csv into a tar.gz.
 # Usage: ./build_macos_intel_release.sh [TAG]
 # Example: ./build_macos_intel_release.sh v1.2.3
 
@@ -20,7 +20,7 @@ echo "==> Building release for ${TARGET_TRIPLE}"
 cargo build --release --target ${TARGET_TRIPLE}
 
 echo "==> Verifying required files"
-for f in config.json stock_code.csv; do
+for f in stock_code.csv; do
   if [[ ! -f "$f" ]]; then
     echo "Missing required file: $f" >&2
     exit 1
@@ -30,10 +30,9 @@ done
 echo "==> Packaging ${PKG_NAME}"
 mkdir -p "$DIST_DIR"
 cp "target/${TARGET_TRIPLE}/release/${APP_NAME}" "${APP_NAME}"
-tar -czf "${DIST_DIR}/${PKG_NAME}.tar.gz" ${APP_NAME} config.json stock_code.csv README.md
+tar -czf "${DIST_DIR}/${PKG_NAME}.tar.gz" ${APP_NAME} stock_code.csv README.md
 shasum -a 256 "${DIST_DIR}/${PKG_NAME}.tar.gz" > "${DIST_DIR}/${PKG_NAME}.tar.gz.sha256"
 rm -f "${APP_NAME}"
 
 echo "==> Done. Artifacts:"
 ls -lh "${DIST_DIR}" | sed 's/^/  /'
-

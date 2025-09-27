@@ -13,7 +13,6 @@ Steps
 - Build a release binary
   - `cargo build --release`
 - Prepare required files next to the binary (or run from project root)
-  - `config.json` (required)
   - `stock_code.csv` (required, one code per line)
 - Run the program
   - `./target/release/stock-cli`
@@ -62,8 +61,7 @@ Tips
 - Unicode-friendly rendering for names and labels
 
 Highlighted structure
-- `src/core/fetcher.rs` — Async HTTP client and snapshot parsing
-- `src/core/history.rs` — Daily OHLC downloader used by the chart
-- `src/database.rs` — In-memory store, filtering, CSV I/O
+- `src/application/` — App wiring and lifecycle
+- `src/services/` — Async HTTP clients and historical data fetchers
+- `src/storage/` — In-memory store, filtering logic, and CSV I/O
 - `src/ui/` — Ratatui components (main menu, CSV picker, thresholds editor, progress, results, charts)
-- `src/app.rs` — App wiring and lifecycle

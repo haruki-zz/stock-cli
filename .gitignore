@@ -6,7 +6,6 @@
 !/README.md
 !/Cargo.toml
 !/Cargo.lock
-!/config.json
 !/stock_code.csv
 !/build_macos_intel_release.sh
 

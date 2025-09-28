@@ -3,10 +3,13 @@ use std::fs;
 use std::path::Path;
 
 use crate::config::Config;
-use crate::storage::{ensure_metric_thresholds, StockDatabase};
+use crate::storage::{
+    ensure_metric_thresholds, load_threshold_preset, save_threshold_preset, StockDatabase,
+};
 use crate::ui::{
-    run_csv_picker, run_fetch_progress, run_main_menu, run_results_table, run_thresholds_editor,
-    FetchCancelled, MenuAction,
+    run_csv_picker, run_fetch_progress, run_filters_menu, run_main_menu, run_preset_picker,
+    run_results_table, run_save_preset_dialog, run_thresholds_editor, FetchCancelled,
+    FilterMenuAction, MenuAction,
 };
 
 /// Find the most recently modified CSV file within the given directory.
@@ -57,10 +60,14 @@ pub async fn run() -> Result<()> {
     // Load stock codes
     let stock_codes = load_stock_codes(stock_codes_path)?;
 
-    // Create raw data directory
+    // Create data directories
     let raw_data_dir = "raw_data";
     if !Path::new(raw_data_dir).exists() {
         fs::create_dir_all(raw_data_dir).context("Failed to create raw_data directory")?;
+    }
+    let filters_dir = "filters";
+    if !Path::new(filters_dir).exists() {
+        fs::create_dir_all(filters_dir).context("Failed to create filters directory")?;
     }
 
     // Prepare database; load later based on user choice
@@ -146,15 +153,57 @@ pub async fn run() -> Result<()> {
                     }
                 }
             }
-            MenuAction::SetThresholds => {
-                // Threshold editor mutates the map in-place and returns once the user exits the modal.
-                run_thresholds_editor(&mut thresholds)?;
-            }
             MenuAction::Filter => {
                 // Precompute the matching codes; the results view stays read-only.
                 let codes = database.filter_stocks(&thresholds);
                 run_results_table(&database, &codes)?;
             }
+            MenuAction::Filters => loop {
+                match run_filters_menu()? {
+                    FilterMenuAction::Adjust => {
+                        run_thresholds_editor(&mut thresholds)?;
+                    }
+                    FilterMenuAction::Save => match run_save_preset_dialog()? {
+                        Some(name) => match sanitize_preset_name(&name) {
+                            Some(file_name) => {
+                                if let Err(err) = save_threshold_preset(
+                                    Path::new(filters_dir),
+                                    &file_name,
+                                    &thresholds,
+                                ) {
+                                    eprintln!("Failed to save filters: {}", err);
+                                } else {
+                                    println!("Filters saved as '{}'.", file_name);
+                                }
+                            }
+                            None => println!(
+                                "Preset name must contain letters, numbers, spaces, '-' or '_'."
+                            ),
+                        },
+                        None => println!("Save filters cancelled."),
+                    },
+                    FilterMenuAction::Load => match run_preset_picker(filters_dir)? {
+                        Some(path) => match load_threshold_preset(Path::new(&path)) {
+                            Ok(mut loaded) => {
+                                ensure_metric_thresholds(&mut loaded);
+                                thresholds = loaded;
+                                println!(
+                                    "Applied filters from {}",
+                                    Path::new(&path)
+                                        .file_name()
+                                        .and_then(|s| s.to_str())
+                                        .unwrap_or(&path)
+                                );
+                            }
+                            Err(err) => {
+                                eprintln!("Failed to load filters: {}", err);
+                            }
+                        },
+                        None => {}
+                    },
+                    FilterMenuAction::Back => break,
+                }
+            },
             MenuAction::Load => {
                 if let Some(filename) = run_csv_picker(raw_data_dir)? {
                     match StockDatabase::load_from_csv(&filename) {
@@ -205,4 +254,23 @@ fn load_stock_codes(file_path: &str) -> Result<Vec<String>> {
     }
 
     Ok(codes)
+}
+
+fn sanitize_preset_name(name: &str) -> Option<String> {
+    let mut result = String::new();
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            result.push(ch);
+        } else if matches!(ch, ' ' | '-' | '_') {
+            result.push(match ch {
+                ' ' => '_',
+                other => other,
+            });
+        }
+    }
+    if result.is_empty() {
+        None
+    } else {
+        Some(result.to_lowercase())
+    }
 }

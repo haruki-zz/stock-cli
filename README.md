@@ -38,6 +38,10 @@ Menu actions
   - Press Enter to toggle the inline price chart; ←/→ or Enter cycle across 1Y/6M/3M/1M/1W ranges; X closes the chart
   - When the chart is open it fills the lower half of the screen while the table continues to show the full metric columns; Esc returns to the menu
   - The chart header shows timeframe shortcuts; the detail panel lists price/turnover metrics while the chart is visible
+- Filters — Manage thresholds
+  - Set Filters — Adjust ranges using the editor
+  - Save Filters — Store the current thresholds as a named preset (`filters/`)
+  - Load Filters — Pick a saved preset to apply immediately
 - Set Filters — Adjust threshold ranges used for filtering
   - Third-level editor (inline modal):
     - Tab/↑/↓/j/k: switch between Lower and Upper

@@ -19,12 +19,28 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
     // Ensure raw mode and the alternate screen are always restored regardless of how we exit.
     let mut guard = TerminalGuard::new()?;
 
-    let items: Vec<(&str, MenuAction)> = vec![
-        ("Show Filtered", MenuAction::Filter),
-        ("Set Filters", MenuAction::SetThresholds),
-        ("Refresh Data", MenuAction::Update),
-        ("Load CSV", MenuAction::Load),
-        ("Quit", MenuAction::Exit),
+    let items: Vec<(&str, &str, MenuAction)> = vec![
+        (
+            "Show Filtered",
+            "Review the latest data using current filters",
+            MenuAction::Filter,
+        ),
+        (
+            "Set Filters",
+            "Adjust threshold ranges (↑/↓ or j/k, Enter, Esc)",
+            MenuAction::SetThresholds,
+        ),
+        (
+            "Refresh Data",
+            "Fetch the newest stock snapshot",
+            MenuAction::Update,
+        ),
+        (
+            "Load CSV",
+            "Pick a saved dataset from raw_data/",
+            MenuAction::Load,
+        ),
+        ("Quit", "Exit Stock CLI", MenuAction::Exit),
     ];
     let mut selected = 0usize;
 
@@ -52,20 +68,32 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
             let list_items: Vec<ListItem> = items
                 .iter()
                 .enumerate()
-                .map(|(i, (label, _))| {
-                    let mut line = Line::from(*label);
+                .map(|(i, (label, description, _))| {
+                    let line = Line::from(vec![
+                        Span::styled(
+                            format!("{:<18}", label),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(*description, Style::default().fg(Color::Gray)),
+                    ]);
+                    let mut item = ListItem::new(line);
                     if i == selected {
-                        line = line.style(Style::default().add_modifier(Modifier::REVERSED));
+                        item = item.style(Style::default().add_modifier(Modifier::REVERSED));
                     }
-                    ListItem::new(line)
+                    item
                 })
                 .collect();
-            let list =
-                List::new(list_items).block(Block::default().borders(Borders::ALL).title("Menu"));
+            let list = List::new(list_items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Menu (↑/↓ or j/k)"),
+            );
             f.render_widget(list, chunks[1]);
 
-            let help = Paragraph::new("↑/↓ navigate • Enter select • Esc back • Ctrl+C exit")
-                .style(Style::default().fg(Color::Gray));
+            let help =
+                Paragraph::new("↑/↓ or j/k navigate • Enter select • Esc back • Ctrl+C exit")
+                    .style(Style::default().fg(Color::Gray));
             f.render_widget(help, chunks[2]);
         })?;
 
@@ -85,7 +113,7 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
                     }
                     KeyCode::Enter => {
                         // Leave the alternate screen before returning so the caller can print freely.
-                        let action = items[selected].1.clone();
+                        let action = items[selected].2.clone();
                         guard.restore()?;
                         return Ok(action);
                     }

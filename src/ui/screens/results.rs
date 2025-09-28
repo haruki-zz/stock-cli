@@ -332,7 +332,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
             )
         } else if chart_state.show {
             format!(
-                "Row {}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter/←/→ timeframe • X close • Esc back",
+                "Row {}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter/←/→/h/l timeframe • X close • Esc back",
                 selected + 1,
                 total,
                 offset + 1,
@@ -432,12 +432,12 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             &mut chart_state,
                         );
                     }
-                    KeyCode::Right => {
+                    KeyCode::Right | KeyCode::Char('l') => {
                         if chart_state.show {
                             chart_state.next_timeframe();
                         }
                     }
-                    KeyCode::Left => {
+                    KeyCode::Left | KeyCode::Char('h') => {
                         if chart_state.show {
                             chart_state.prev_timeframe();
                         }

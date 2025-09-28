@@ -1,11 +1,5 @@
 use anyhow::{Context, Result};
-use crossterm::{
-    cursor,
-    terminal::{self, ClearType},
-    QueueableCommand,
-};
 use std::fs;
-use std::io;
 use std::path::Path;
 
 use crate::config::Config;
@@ -73,77 +67,49 @@ pub async fn run() -> Result<()> {
     let mut database = StockDatabase::new(Vec::new());
     let mut loaded_file: Option<String> = None;
     // Fixed subcontent top row used by legacy action screens
-    let sub_top: u16 = 14;
-
-    // Initial previous-data prompt shown below the main menu
+    // Automatically load the most recent snapshot if available; otherwise fetch fresh data.
     if let Some((latest_path, latest_name)) = find_latest_csv(raw_data_dir) {
-        let mut out = std::io::stdout();
-        out.queue(cursor::MoveTo(0, 0))?;
-        out.queue(terminal::Clear(ClearType::All))?;
-        use std::io::Write;
-        write!(
-            out,
-            "Found previous data: {}. Load it? [y/N]: \r\n",
-            latest_name
-        )?;
-        out.flush()?;
+        match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
+            Ok(db) => {
+                println!("Loaded latest data from {}", latest_name);
+                database = db;
+                loaded_file = Some(latest_name);
+            }
+            Err(e) => {
+                eprintln!("Failed to load previous data: {}", e);
+            }
+        }
+    }
 
-        // Temporarily disable raw to read input
-        terminal::disable_raw_mode()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        terminal::enable_raw_mode()?;
-        let choice = input.trim().to_lowercase();
-
-        out.queue(cursor::MoveTo(0, sub_top))?;
-        out.queue(terminal::Clear(ClearType::FromCursorDown))?;
-        if choice == "y" {
-            match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
-                Ok(db) => {
-                    database = db;
-                    write!(out, "Data loaded from {}\r\n", latest_name)?;
-                    loaded_file = Some(latest_name.clone());
-                }
-                Err(e) => {
-                    write!(out, "Failed to load data: {}\r\n", e)?;
+    if database.data.is_empty() {
+        match run_fetch_progress(
+            raw_data_dir,
+            &stock_codes,
+            region_config.clone(),
+            info_indices.clone(),
+        )
+        .await
+        {
+            Ok((data, saved_file)) => {
+                database.update(data);
+                println!("Saved: {}", saved_file);
+                if let Some(name) = std::path::Path::new(&saved_file)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                {
+                    loaded_file = Some(name.to_string());
+                } else {
+                    loaded_file = Some(saved_file);
                 }
             }
-        } else {
-            // User chose not to load previous data; fetch fresh data automatically
-            out.flush()?;
-            // Ensure screen below menu is clean before fetching
-            drop(out);
-            // Perform update with Ratatui progress
-            match run_fetch_progress(
-                raw_data_dir,
-                &stock_codes,
-                region_config.clone(),
-                info_indices.clone(),
-            )
-            .await
-            {
-                Ok((data, saved_file)) => {
-                    database.update(data);
-                    println!("Saved: {}", saved_file);
-                    if let Some(name) = std::path::Path::new(&saved_file)
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                    {
-                        loaded_file = Some(name.to_string());
-                    } else {
-                        loaded_file = Some(saved_file);
-                    }
-                }
-                Err(err) => {
-                    if err.downcast_ref::<FetchCancelled>().is_some() {
-                        println!("Fetch cancelled.");
-                    } else {
-                        eprintln!("Failed to fetch data: {}", err);
-                    }
+            Err(err) => {
+                if err.downcast_ref::<FetchCancelled>().is_some() {
+                    println!("Fetch cancelled.");
+                } else {
+                    eprintln!("Failed to fetch data: {}", err);
                 }
             }
         }
-        // Nothing to redraw here; Ratatui UI will start below
     }
 
     // Main interactive loop using Ratatui. Each menu action owns a dedicated screen so the

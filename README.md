@@ -27,8 +27,9 @@ Start the app
 - `stock-cli` (or `cargo run` during development)
 
 Global navigation
-- ↑/↓ or j/k: move selection
-- Enter: select / confirm • Esc: back • Ctrl+C: exit
+- ↑/↓ or j/k: move selection (vertical)
+- ←/→ or h/l: move selection (horizontal, where available)
+- Enter: confirm / drill down • Esc: back • Ctrl+C: exit
 
 Menu actions
 - Show Filtered — Browse stocks matching current filters

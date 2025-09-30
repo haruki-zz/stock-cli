@@ -19,7 +19,7 @@ impl std::fmt::Display for FetchCancelled {
 impl std::error::Error for FetchCancelled {}
 
 pub async fn run_fetch_progress(
-    raw_data_dir: &str,
+    snapshots_dir: &str,
     stock_codes: &[String],
     region_config: RegionConfig,
     static_names: std::collections::HashMap<String, String>,
@@ -111,7 +111,7 @@ pub async fn run_fetch_progress(
     let data = res?;
     let timestamp = chrono::Local::now().format("%Y_%m_%d_%H_%M");
     let database = StockDatabase::new(data.clone());
-    let filename = format!("{}/{}_raw.csv", raw_data_dir, timestamp);
+    let filename = format!("{}/{}_raw.csv", snapshots_dir, timestamp);
     database.save_to_csv(&filename)?;
 
     guard.terminal_mut().draw(|f| {

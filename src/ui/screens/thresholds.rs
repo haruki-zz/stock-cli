@@ -86,7 +86,7 @@ pub fn run_thresholds_editor(
             let title = Paragraph::new(
                 "Edit thresholds — \u{2191}/\u{2193}/j/k move • Space toggles selected metric • Enter edit • Esc back",
             )
-            .style(Style::default().fg(Color::Cyan));
+            .style(Style::default().fg(Color::Rgb(230, 121, 0)));
             f.render_widget(title, chunks[0]);
 
             let total_items = keys.len() + 1;

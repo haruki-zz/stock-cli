@@ -26,7 +26,8 @@ pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
                 .split(size);
 
             let title =
-                Paragraph::new("Select a stock market").style(Style::default().fg(Color::Cyan));
+                Paragraph::new("Select a stock market")
+                    .style(Style::default().fg(Color::Rgb(230, 121, 0)));
             f.render_widget(title, area[0]);
 
             let items: Vec<ListItem> = options

@@ -45,7 +45,11 @@ pub async fn run() -> Result<()> {
     let config = Config::builtin();
     let available_regions = config.available_regions();
 
-    let selected_region_code = if available_regions.len() == 1 {
+    if available_regions.is_empty() {
+        anyhow::bail!("No regions configured in the application.");
+    }
+
+    let mut current_region_code = if available_regions.len() == 1 {
         available_regions[0].code.clone()
     } else {
         let options: Vec<(String, String)> = available_regions
@@ -63,185 +67,221 @@ pub async fn run() -> Result<()> {
         }
     };
 
-    let region_config = config
-        .get_region_config(&selected_region_code)
-        .context("Region not found in config")?
-        .clone();
+    'app: loop {
+        let region_config = config
+            .get_region_config(&current_region_code)
+            .context("Region not found in config")?
+            .clone();
 
-    let LoadedStockCodes {
-        codes: stock_codes,
-        names: stock_names,
-    } = prepare_stock_codes(&region_config).await?;
+        let LoadedStockCodes {
+            codes: stock_codes,
+            names: stock_names,
+        } = prepare_stock_codes(&region_config).await?;
 
-    let mut thresholds = region_config.thresholds.clone();
-    ensure_metric_thresholds(&mut thresholds);
+        let mut thresholds = region_config.thresholds.clone();
+        ensure_metric_thresholds(&mut thresholds);
 
-    // Create per-market data directories
-    let raw_data_dir = format!("raw_data/{}", region_config.code.to_lowercase());
-    if !Path::new(&raw_data_dir).exists() {
-        fs::create_dir_all(&raw_data_dir)
-            .with_context(|| format!("Failed to create directory {}", raw_data_dir))?;
-    }
-    let filters_dir = format!("filters/{}", region_config.code.to_lowercase());
-    if !Path::new(&filters_dir).exists() {
-        fs::create_dir_all(&filters_dir)
-            .with_context(|| format!("Failed to create directory {}", filters_dir))?;
-    }
-
-    // Prepare database; load later based on user choice
-    let mut database = StockDatabase::new(Vec::new());
-    let mut loaded_file: Option<String> = None;
-    if let Some((latest_path, latest_name)) = find_latest_csv(&raw_data_dir) {
-        match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
-            Ok(db) => {
-                println!(
-                    "Loaded latest {} data from {}",
-                    region_config.code, latest_name
-                );
-                database = db;
-                loaded_file = Some(latest_name);
-            }
-            Err(e) => {
-                eprintln!("Failed to load previous data: {}", e);
-            }
+        // Create per-market data directories
+        let snapshots_dir = format!("assets/snapshots/{}", region_config.code.to_lowercase());
+        if !Path::new(&snapshots_dir).exists() {
+            fs::create_dir_all(&snapshots_dir)
+                .with_context(|| format!("Failed to create directory {}", snapshots_dir))?;
         }
-    }
+        let filters_dir = format!("assets/filters/{}", region_config.code.to_lowercase());
+        if !Path::new(&filters_dir).exists() {
+            fs::create_dir_all(&filters_dir)
+                .with_context(|| format!("Failed to create directory {}", filters_dir))?;
+        }
 
-    if database.data.is_empty() {
-        match run_fetch_progress(
-            &raw_data_dir,
-            &stock_codes,
-            region_config.clone(),
-            stock_names.clone(),
-        )
-        .await
-        {
-            Ok((data, saved_file)) => {
-                database.update(data);
-                println!("Saved: {}", saved_file);
-                if let Some(name) = std::path::Path::new(&saved_file)
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                {
-                    loaded_file = Some(name.to_string());
-                } else {
-                    loaded_file = Some(saved_file);
+        // Prepare database; load later based on user choice
+        let mut database = StockDatabase::new(Vec::new());
+        let mut loaded_file: Option<String> = None;
+        if let Some((latest_path, latest_name)) = find_latest_csv(&snapshots_dir) {
+            match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
+                Ok(db) => {
+                    println!(
+                        "Loaded latest {} data from {}",
+                        region_config.code, latest_name
+                    );
+                    database = db;
+                    loaded_file = Some(latest_name);
                 }
-            }
-            Err(err) => {
-                if err.downcast_ref::<FetchCancelled>().is_some() {
-                    println!("Fetch cancelled.");
-                } else {
-                    eprintln!("Failed to fetch data: {}", err);
+                Err(e) => {
+                    eprintln!("Failed to load previous data: {}", e);
                 }
             }
         }
-    }
 
-    loop {
-        match run_main_menu(loaded_file.as_deref())? {
-            MenuAction::Update => {
-                match run_fetch_progress(
-                    &raw_data_dir,
-                    &stock_codes,
-                    region_config.clone(),
-                    stock_names.clone(),
-                )
-                .await
-                {
-                    Ok((data, saved_file)) => {
-                        database.update(data);
-                        println!("Saved: {}", saved_file);
-                        if let Some(name) = std::path::Path::new(&saved_file)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                        {
-                            loaded_file = Some(name.to_string());
-                        } else {
-                            loaded_file = Some(saved_file);
-                        }
+        if database.data.is_empty() {
+            match run_fetch_progress(
+                &snapshots_dir,
+                &stock_codes,
+                region_config.clone(),
+                stock_names.clone(),
+            )
+            .await
+            {
+                Ok((data, saved_file)) => {
+                    database.update(data);
+                    println!("Saved: {}", saved_file);
+                    if let Some(name) = std::path::Path::new(&saved_file)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                    {
+                        loaded_file = Some(name.to_string());
+                    } else {
+                        loaded_file = Some(saved_file);
                     }
-                    Err(err) => {
-                        if err.downcast_ref::<FetchCancelled>().is_some() {
-                            println!("Update cancelled.");
-                        } else {
-                            eprintln!("Failed to refresh data: {}", err);
-                        }
+                }
+                Err(err) => {
+                    if err.downcast_ref::<FetchCancelled>().is_some() {
+                        println!("Fetch cancelled.");
+                    } else {
+                        eprintln!("Failed to fetch data: {}", err);
                     }
                 }
             }
-            MenuAction::Filter => {
-                let codes = database.filter_stocks(&thresholds);
-                run_results_table(&database, &codes)?;
-            }
-            MenuAction::Filters => loop {
-                match run_filters_menu()? {
-                    FilterMenuAction::Adjust => {
-                        run_thresholds_editor(&mut thresholds)?;
-                    }
-                    FilterMenuAction::Save => match run_save_preset_dialog()? {
-                        Some(name) => match sanitize_preset_name(&name) {
-                            Some(file_name) => {
-                                if let Err(err) = save_threshold_preset(
-                                    Path::new(&filters_dir),
-                                    &file_name,
-                                    &thresholds,
-                                ) {
-                                    eprintln!("Failed to save filters: {}", err);
-                                } else {
-                                    println!("Filters saved as '{}'.", file_name);
-                                }
-                            }
-                            None => println!(
-                                "Preset name must contain letters, numbers, spaces, '-' or '_'."
-                            ),
-                        },
-                        None => println!("Save filters cancelled."),
-                    },
-                    FilterMenuAction::Load => match run_preset_picker(&filters_dir)? {
-                        Some(path) => match load_threshold_preset(Path::new(&path)) {
-                            Ok(mut loaded) => {
-                                ensure_metric_thresholds(&mut loaded);
-                                thresholds = loaded;
-                                println!(
-                                    "Applied filters from {}",
-                                    Path::new(&path)
-                                        .file_name()
-                                        .and_then(|s| s.to_str())
-                                        .unwrap_or(&path)
-                                );
-                            }
-                            Err(err) => {
-                                eprintln!("Failed to load filters: {}", err);
-                            }
-                        },
-                        None => {}
-                    },
-                    FilterMenuAction::Back => break,
-                }
-            },
-            MenuAction::Load => {
-                if let Some(filename) = run_csv_picker(&raw_data_dir)? {
-                    match StockDatabase::load_from_csv(&filename) {
-                        Ok(loaded_db) => {
-                            database = loaded_db;
-                            println!("Loaded: {}", filename);
-                            if let Some(name) = std::path::Path::new(&filename)
+        }
+
+        loop {
+            match run_main_menu(
+                loaded_file.as_deref(),
+                available_regions.len() > 1,
+                &region_config.code,
+                &region_config.name,
+            )? {
+                MenuAction::Update => {
+                    match run_fetch_progress(
+                        &snapshots_dir,
+                        &stock_codes,
+                        region_config.clone(),
+                        stock_names.clone(),
+                    )
+                    .await
+                    {
+                        Ok((data, saved_file)) => {
+                            database.update(data);
+                            println!("Saved: {}", saved_file);
+                            if let Some(name) = std::path::Path::new(&saved_file)
                                 .file_name()
                                 .and_then(|s| s.to_str())
                             {
                                 loaded_file = Some(name.to_string());
                             } else {
-                                loaded_file = Some(filename);
+                                loaded_file = Some(saved_file);
                             }
                         }
-                        Err(e) => {
-                            eprintln!("Load failed for {}: {}", filename, e);
+                        Err(err) => {
+                            if err.downcast_ref::<FetchCancelled>().is_some() {
+                                println!("Update cancelled.");
+                            } else {
+                                eprintln!("Failed to refresh data: {}", err);
+                            }
                         }
                     }
                 }
+                MenuAction::Filter => {
+                    let codes = database.filter_stocks(&thresholds);
+                    run_results_table(&database, &codes)?;
+                }
+                MenuAction::Filters => loop {
+                    match run_filters_menu()? {
+                        FilterMenuAction::Adjust => {
+                            run_thresholds_editor(&mut thresholds)?;
+                        }
+                        FilterMenuAction::Save => match run_save_preset_dialog()? {
+                            Some(name) => match sanitize_preset_name(&name) {
+                                Some(file_name) => {
+                                    if let Err(err) = save_threshold_preset(
+                                        Path::new(&filters_dir),
+                                        &file_name,
+                                        &thresholds,
+                                    ) {
+                                        eprintln!("Failed to save filters: {}", err);
+                                    } else {
+                                        println!("Filters saved as '{}'.", file_name);
+                                    }
+                                }
+                                None => println!(
+                                    "Preset name must contain letters, numbers, spaces, '-' or '_'."
+                                ),
+                            },
+                            None => println!("Save filters cancelled."),
+                        },
+                        FilterMenuAction::Load => match run_preset_picker(&filters_dir)? {
+                            Some(path) => match load_threshold_preset(Path::new(&path)) {
+                                Ok(mut loaded) => {
+                                    ensure_metric_thresholds(&mut loaded);
+                                    thresholds = loaded;
+                                    println!(
+                                        "Applied filters from {}",
+                                        Path::new(&path)
+                                            .file_name()
+                                            .and_then(|s| s.to_str())
+                                            .unwrap_or(&path)
+                                    );
+                                }
+                                Err(err) => {
+                                    eprintln!("Failed to load filters: {}", err);
+                                }
+                            },
+                            None => {}
+                        },
+                        FilterMenuAction::Back => break,
+                    }
+                },
+                MenuAction::Load => {
+                    if let Some(filename) = run_csv_picker(&snapshots_dir)? {
+                        match StockDatabase::load_from_csv(&filename) {
+                            Ok(loaded_db) => {
+                                database = loaded_db;
+                                println!("Loaded: {}", filename);
+                                if let Some(name) = std::path::Path::new(&filename)
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                {
+                                    loaded_file = Some(name.to_string());
+                                } else {
+                                    loaded_file = Some(filename);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Load failed for {}: {}", filename, e);
+                            }
+                        }
+                    }
+                }
+                MenuAction::SwitchRegion => {
+                    if available_regions.len() <= 1 {
+                        println!("Only one market configured; cannot switch regions.");
+                        continue;
+                    }
+
+                    let options: Vec<(String, String)> = available_regions
+                        .iter()
+                        .map(|region| (region.code.clone(), region.name.clone()))
+                        .collect();
+
+                    match run_market_picker(&options) {
+                        Ok(new_code) => {
+                            if new_code != current_region_code {
+                                current_region_code = new_code;
+                                continue 'app;
+                            }
+                        }
+                        Err(err) => {
+                            if !err
+                                .to_string()
+                                .to_lowercase()
+                                .contains("cancelled")
+                            {
+                                return Err(err);
+                            }
+                        }
+                    }
+                }
+                MenuAction::Exit => break 'app,
             }
-            MenuAction::Exit => break,
         }
     }
 

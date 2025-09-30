@@ -19,14 +19,14 @@ Steps
   - `./target/release/stock-cli`
 
 Notes
-- `raw_data/<market>/` is created on first fetch and stores timestamped CSVs per market.
+- `assets/snapshots/<market>/` is created on first fetch and stores timestamped CSVs per market.
 - The app errors if the configured stock code file is missing (e.g., `stock_code.csv` for CN) or empty.
 
 ## Usage
 
 Start the app
 - `stock-cli` (or `cargo run` during development)
-- Pick the desired market when prompted; data, presets, and raw CSVs are stored per market (`raw_data/<market>/`, `filters/<market>/`)
+- Pick the desired market when prompted; data, presets, and raw CSVs are stored per market (`assets/snapshots/<market>/`, `assets/filters/<market>/`)
 
 Global navigation
 - ↑/↓ or j/k: move selection (vertical)
@@ -42,16 +42,17 @@ Menu actions
   - The chart header shows timeframe shortcuts; the detail panel lists price/turnover metrics while the chart is visible
 - Filters — Manage thresholds
   - Set Filters — Adjust ranges using the editor
-  - Save Filters — Store the current thresholds as a named preset (`filters/`)
+  - Save Filters — Store the current thresholds as a named preset (`assets/filters/`)
   - Load Filters — Pick a saved preset to apply immediately
 - Set Filters — Adjust threshold ranges used for filtering
   - Third-level editor (inline modal):
     - Tab/↑/↓/j/k: switch between Lower and Upper
     - Type numbers (digits/./-), Backspace to edit, Enter to save, Esc to cancel
     - Values display with two decimals
-- Refresh Data — Fetch latest data and save to `raw_data/`
+- Refresh Data — Fetch latest data and save to `assets/snapshots/`
   - Progress screen shows “Please wait…” and a textual percentage; Enter to continue when done
-- Load CSV — Pick a CSV from `raw_data/` using the same keys (↑/↓/j/k, Enter/Esc)
+- Load CSV — Pick a CSV from `assets/snapshots/` using the same keys (↑/↓/j/k, Enter/Esc)
+- Switch Market — Change the active region without restarting (only shown when multiple regions are available)
 - Quit — Exit
 
 Tips
@@ -63,9 +64,10 @@ Tips
 - Async fetching with progress and error handling (Tokio + anyhow)
 - Ratatui-powered TUI with clear, consistent key bindings and selectable tables
 - Inline historical charts (1Y/6M/3M/1M/1W) alongside filtered results
-- CSV persistence with timestamped filenames under `raw_data/`
+- CSV persistence with timestamped filenames under `assets/snapshots/`
 - Powerful filtering by configurable thresholds
 - Built-in CSV picker to load past datasets
+- Live region switching without restarting when multiple markets are configured
 - Unicode-friendly rendering for names and labels
 
 Highlighted structure

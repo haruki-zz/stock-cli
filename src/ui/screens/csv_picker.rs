@@ -14,7 +14,9 @@ pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
         // Surface a transient message instead of leaving the user on a blank screen.
         guard.terminal_mut().draw(|f| {
             let size = f.size();
-            let block = Paragraph::new("No CSV files in raw_data/. Use 'Refresh Data' to fetch.")
+            let block = Paragraph::new(
+                "No CSV files in assets/snapshots/. Use 'Refresh Data' to fetch."
+            )
                 .block(Block::default().borders(Borders::ALL).title("Load CSV"));
             f.render_widget(block, size);
         })?;

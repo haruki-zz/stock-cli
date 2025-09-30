@@ -1,7 +1,8 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
-use std::time::Duration;
+use std::{convert::TryFrom, time::Duration};
+use unicode_width::UnicodeWidthStr;
 
 use crate::services::StockData;
 use crate::storage::StockDatabase;
@@ -299,9 +300,28 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 .collect();
 
             let header = Row::new(header_cells);
+
+            let name_header_width = UnicodeWidthStr::width(header_columns[0].0);
+            let code_header_width = UnicodeWidthStr::width(header_columns[1].0);
+            let name_data_width = rows_data
+                .iter()
+                .map(|stock| UnicodeWidthStr::width(stock.stock_name.as_str()))
+                .max()
+                .unwrap_or(0);
+            let code_data_width = rows_data
+                .iter()
+                .map(|stock| UnicodeWidthStr::width(stock.stock_code.as_str()))
+                .max()
+                .unwrap_or(0);
+
+            let name_col_width = u16::try_from(name_header_width.max(name_data_width) + 2)
+                .unwrap_or(u16::MAX);
+            let code_col_width = u16::try_from(code_header_width.max(code_data_width) + 2)
+                .unwrap_or(u16::MAX);
+
             let widths = vec![
-                Constraint::Length(18),
-                Constraint::Length(10),
+                Constraint::Length(name_col_width),
+                Constraint::Length(code_col_width),
                 Constraint::Length(3),
                 Constraint::Length(12),
                 Constraint::Length(12),

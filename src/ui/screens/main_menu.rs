@@ -12,6 +12,7 @@ pub enum MenuAction {
     Filter,
     Filters,
     Load,
+    SwitchRegion,
     Exit,
 }
 
@@ -23,11 +24,16 @@ pub enum FilterMenuAction {
     Back,
 }
 
-pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
+pub fn run_main_menu(
+    loaded_file: Option<&str>,
+    allow_region_switch: bool,
+    region_code: &str,
+    region_name: &str,
+) -> Result<MenuAction> {
     // Ensure raw mode and the alternate screen are always restored regardless of how we exit.
     let mut guard = TerminalGuard::new()?;
 
-    let items: Vec<(&str, &str, MenuAction)> = vec![
+    let mut items: Vec<(&str, &str, MenuAction)> = vec![
         (
             "Show Filtered",
             "Review the latest data using current filters",
@@ -45,11 +51,20 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
         ),
         (
             "Load CSV",
-            "Pick a saved dataset from raw_data/",
+            "Pick a saved dataset from assets/snapshots/",
             MenuAction::Load,
         ),
-        ("Quit", "Exit Stock CLI", MenuAction::Exit),
     ];
+
+    if allow_region_switch {
+        items.push((
+            "Switch Market",
+            "Change the active market region",
+            MenuAction::SwitchRegion,
+        ));
+    }
+
+    items.push(("Quit", "Exit Stock CLI", MenuAction::Exit));
     let mut selected = 0usize;
 
     loop {
@@ -65,12 +80,17 @@ pub fn run_main_menu(loaded_file: Option<&str>) -> Result<MenuAction> {
                 .split(size);
 
             let header_text = match loaded_file {
-                Some(name) if !name.is_empty() => {
-                    format!("Stock CLI — Main Menu\nData file: {}", name)
-                }
-                _ => "Stock CLI — Main Menu\nData file: None".to_string(),
+                Some(name) if !name.is_empty() => format!(
+                    "Stock CLI — Main Menu\nRegion: {} — {}\nData file: {}",
+                    region_code, region_name, name
+                ),
+                _ => format!(
+                    "Stock CLI — Main Menu\nRegion: {} — {}\nData file: None",
+                    region_code, region_name
+                ),
             };
-            let header = Paragraph::new(header_text).style(Style::default().fg(Color::Cyan));
+            let header = Paragraph::new(header_text)
+                .style(Style::default().fg(Color::Rgb(230, 121, 0)));
             f.render_widget(header, chunks[0]);
 
             let list_items: Vec<ListItem> = items
@@ -176,7 +196,7 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
                 .split(size);
 
             let title = Paragraph::new("Filters — manage threshold presets")
-                .style(Style::default().fg(Color::Cyan));
+                .style(Style::default().fg(Color::Rgb(230, 121, 0)));
             f.render_widget(title, chunks[0]);
 
             let list_items: Vec<ListItem> = entries

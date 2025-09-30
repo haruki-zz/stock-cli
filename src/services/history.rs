@@ -6,6 +6,7 @@ use reqwest::{
 };
 use serde_json::Value;
 use std::{
+    io::Cursor,
     sync::mpsc::{self, Receiver},
     thread,
     time::Duration,
@@ -17,6 +18,8 @@ const HISTORY_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 const HISTORY_ACCEPT_LANGUAGE: &str = "en-US,en;q=0.9";
 const HISTORY_RECORD_DAYS: usize = 420;
+const STOOQ_HISTORY_ENDPOINT: &str = "https://stooq.com/q/d/l/";
+const STOOQ_SYMBOL_SUFFIX_JP: &str = ".jp";
 
 #[derive(Clone)]
 pub(crate) struct Candle {
@@ -29,19 +32,23 @@ pub(crate) struct Candle {
 
 pub(crate) type HistoryReceiver = Receiver<Result<Vec<Candle>>>;
 
-pub(crate) fn spawn_history_fetch(stock_code: &str) -> HistoryReceiver {
+pub(crate) fn spawn_history_fetch(stock_code: &str, market: &str) -> HistoryReceiver {
     let code = stock_code.to_string();
+    let market_code = market.to_string();
     let (tx, rx) = mpsc::channel();
 
     thread::spawn(move || {
-        let result = fetch_price_history(&code);
+        let result = match market_code.as_str() {
+            "JP" => fetch_price_history_stooq(&code),
+            _ => fetch_price_history_tencent(&code),
+        };
         let _ = tx.send(result);
     });
 
     rx
 }
 
-fn fetch_price_history(stock_code: &str) -> Result<Vec<Candle>> {
+fn fetch_price_history_tencent(stock_code: &str) -> Result<Vec<Candle>> {
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -105,6 +112,96 @@ fn fetch_price_history(stock_code: &str) -> Result<Vec<Candle>> {
         };
         let Some(low) = row.get(4).and_then(parse_number) else {
             continue;
+        };
+
+        let date = match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+            Ok(date) => date,
+            Err(_) => continue,
+        };
+        let Some(naive) = date.and_hms_opt(0, 0, 0) else {
+            continue;
+        };
+        let timestamp = match Local.from_local_datetime(&naive) {
+            LocalResult::Single(dt) => dt,
+            LocalResult::Ambiguous(first, _) => first,
+            LocalResult::None => continue,
+        };
+
+        candles.push(Candle {
+            timestamp,
+            open,
+            high,
+            low,
+            close,
+        });
+    }
+
+    candles.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    if candles.is_empty() {
+        anyhow::bail!("No historical data for {}", stock_code);
+    }
+
+    Ok(candles)
+}
+
+fn fetch_price_history_stooq(stock_code: &str) -> Result<Vec<Candle>> {
+    let symbol = format!("{}{}", stock_code.to_lowercase(), STOOQ_SYMBOL_SUFFIX_JP);
+    let url = format!(
+        "{endpoint}?s={symbol}&i=d&h=1&e=csv",
+        endpoint = STOOQ_HISTORY_ENDPOINT,
+        symbol = symbol
+    );
+
+    let response = reqwest::blocking::get(&url)
+        .with_context(|| format!("History request failed for {}", stock_code))?;
+
+    if !response.status().is_success() {
+        anyhow::bail!(
+            "History request returned error status {} for {}",
+            response.status(),
+            stock_code
+        );
+    }
+
+    let body = response
+        .text()
+        .with_context(|| format!("Failed to read history body for {}", stock_code))?;
+
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(Cursor::new(body));
+
+    let mut candles = Vec::new();
+
+    for result in reader.records() {
+        let record = result.context("Failed to read historical record")?;
+        let date_str = match record.get(0) {
+            Some(value) if !value.is_empty() => value,
+            _ => continue,
+        };
+
+        let parse_number = |idx: usize| -> Option<f64> {
+            record
+                .get(idx)
+                .and_then(|field| field.trim().parse::<f64>().ok())
+        };
+
+        let open = match parse_number(1) {
+            Some(value) => value,
+            None => continue,
+        };
+        let high = match parse_number(2) {
+            Some(value) => value,
+            None => continue,
+        };
+        let low = match parse_number(3) {
+            Some(value) => value,
+            None => continue,
+        };
+        let close = match parse_number(4) {
+            Some(value) => value,
+            None => continue,
         };
 
         let date = match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures::stream::{self, StreamExt};
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
@@ -7,11 +7,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
-use crate::config::{InfoIndex, RegionConfig};
+use crate::config::{ProviderConfig, RegionConfig, StooqProviderConfig, TencentProviderConfig};
+
+const STOOQ_QUOTE_ENDPOINT: &str = "https://stooq.com/q/l/";
 
 #[derive(Debug, Clone)]
 /// Canonical representation of a single stock row returned by the remote endpoint.
 pub struct StockData {
+    pub market: String,
     pub stock_name: String,
     pub stock_code: String,
     pub curr: f64,
@@ -29,7 +32,7 @@ pub struct StockData {
 pub struct AsyncStockFetcher {
     pub stock_list: Vec<String>,
     pub region_config: RegionConfig,
-    pub info_indices: HashMap<String, InfoIndex>,
+    pub static_names: Arc<HashMap<String, String>>,
     pub client: Client,
     pub progress_counter: Arc<AtomicUsize>,
     pub total_stocks: usize,
@@ -39,13 +42,13 @@ impl AsyncStockFetcher {
     pub fn new(
         stock_list: Vec<String>,
         region_config: RegionConfig,
-        info_indices: HashMap<String, InfoIndex>,
+        static_names: HashMap<String, String>,
     ) -> Self {
         let total_stocks = stock_list.len();
         Self {
             stock_list,
             region_config,
-            info_indices,
+            static_names: Arc::new(static_names),
             client: Client::new(),
             progress_counter: Arc::new(AtomicUsize::new(0)),
             total_stocks,
@@ -90,11 +93,20 @@ impl AsyncStockFetcher {
     }
 
     async fn fetch_stock_data(&self, stock_code: &str) -> Result<StockData> {
+        match &self.region_config.provider {
+            ProviderConfig::Tencent(cfg) => self.fetch_stock_data_tencent(stock_code, cfg).await,
+            ProviderConfig::Stooq(cfg) => self.fetch_stock_data_stooq(stock_code, cfg).await,
+        }
+    }
+
+    async fn fetch_stock_data_tencent(
+        &self,
+        stock_code: &str,
+        cfg: &TencentProviderConfig,
+    ) -> Result<StockData> {
         let url = format!(
             "{}{}{}",
-            self.region_config.urls.request.prefix,
-            stock_code,
-            self.region_config.urls.request.suffix
+            cfg.urls.request.prefix, stock_code, cfg.urls.request.suffix
         );
 
         let mut retry_count = 0;
@@ -106,7 +118,7 @@ impl AsyncStockFetcher {
                 .get(&url)
                 .headers({
                     let mut headers = reqwest::header::HeaderMap::new();
-                    for (key, value) in &self.region_config.urls.request.headers {
+                    for (key, value) in &cfg.urls.request.headers {
                         if let (Ok(header_name), Ok(header_value)) = (
                             reqwest::header::HeaderName::from_bytes(key.as_bytes()),
                             reqwest::header::HeaderValue::from_str(value),
@@ -131,7 +143,7 @@ impl AsyncStockFetcher {
                     if response.status().is_success() {
                         let text = response.text().await?;
 
-                        if text.contains(&self.region_config.urls.firewall_warning.text) {
+                        if text.contains(&cfg.urls.firewall_warning.text) {
                             anyhow::bail!(
                                 "Request for stock {} was blocked by firewall",
                                 stock_code
@@ -139,7 +151,7 @@ impl AsyncStockFetcher {
                         }
 
                         return self
-                            .parse_stock_data(stock_code, &text)
+                            .parse_tencent_stock_data(stock_code, &text, cfg)
                             .context("Failed to parse stock data");
                     } else {
                         retry_count += 1;
@@ -177,7 +189,12 @@ impl AsyncStockFetcher {
         anyhow::bail!("Failed to fetch stock data for {}", stock_code)
     }
 
-    fn parse_stock_data(&self, stock_code: &str, text: &str) -> Result<StockData> {
+    fn parse_tencent_stock_data(
+        &self,
+        stock_code: &str,
+        text: &str,
+        cfg: &TencentProviderConfig,
+    ) -> Result<StockData> {
         let json: Value = serde_json::from_str(text).context("Failed to parse JSON response")?;
 
         let stock_data = json["data"][stock_code]["qt"][stock_code]
@@ -186,8 +203,8 @@ impl AsyncStockFetcher {
 
         // Lazy closures keep the index lookup and type conversion logic uniform across fields.
         let get_string_value = |key: &str| -> Result<String> {
-            let idx = self
-                .info_indices
+            let idx = cfg
+                .info_idxs
                 .get(key)
                 .context(format!("Index for {} not found", key))?;
 
@@ -199,8 +216,8 @@ impl AsyncStockFetcher {
         };
 
         let get_float_value = |key: &str| -> Result<f64> {
-            let idx = self
-                .info_indices
+            let idx = cfg
+                .info_idxs
                 .get(key)
                 .context(format!("Index for {} not found", key))?;
 
@@ -211,8 +228,18 @@ impl AsyncStockFetcher {
                 .context(format!("Failed to parse {} as float", key))
         };
 
+        let stock_name = match get_string_value("stockName") {
+            Ok(name) => name,
+            Err(_) => self
+                .static_names
+                .get(stock_code)
+                .cloned()
+                .unwrap_or_else(|| stock_code.to_string()),
+        };
+
         Ok(StockData {
-            stock_name: get_string_value("stockName")?,
+            market: self.region_config.code.clone(),
+            stock_name,
             stock_code: stock_code.to_string(),
             curr: get_float_value("curr")?,
             prev_closed: get_float_value("prevClosed")?,
@@ -225,4 +252,87 @@ impl AsyncStockFetcher {
             tm: get_float_value("tm")?,
         })
     }
+
+    async fn fetch_stock_data_stooq(
+        &self,
+        stock_code: &str,
+        cfg: &StooqProviderConfig,
+    ) -> Result<StockData> {
+        let symbol = format!("{}{}", stock_code.to_lowercase(), cfg.symbol_suffix);
+        let url = format!(
+            "{endpoint}?s={symbol}&f=sd2t2ohlcpv&h=1&e=csv",
+            endpoint = STOOQ_QUOTE_ENDPOINT,
+            symbol = symbol
+        );
+
+        let response = self.client.get(&url).send().await?;
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Request for stock {} failed with status {}",
+                stock_code,
+                response.status()
+            );
+        }
+
+        let body = response.text().await?;
+        let mut lines = body.lines();
+        let _header = lines.next();
+        let Some(data_line) = lines.next() else {
+            anyhow::bail!("No quote data returned for {}", stock_code);
+        };
+
+        let fields: Vec<&str> = data_line.split(',').collect();
+        if fields.len() < 9 {
+            anyhow::bail!("Unexpected quote format for {}", stock_code);
+        }
+
+        let open = parse_number(fields[3])?;
+        let high = parse_number(fields[4])?;
+        let low = parse_number(fields[5])?;
+        let close = parse_number(fields[6])?;
+        let prev_close = parse_number(fields[7])?;
+        let volume = parse_number(fields[8])?;
+
+        let increase = if prev_close.abs() > f64::EPSILON {
+            ((close - prev_close) / prev_close) * 100.0
+        } else {
+            0.0
+        };
+        let amp = if prev_close.abs() > f64::EPSILON {
+            ((high - low) / prev_close) * 100.0
+        } else {
+            0.0
+        };
+
+        let turn_over = volume / 1_000_000.0;
+        let tm = (volume * close) / 1_000_000.0;
+
+        let name = self
+            .static_names
+            .get(stock_code)
+            .cloned()
+            .unwrap_or_else(|| stock_code.to_string());
+
+        Ok(StockData {
+            market: self.region_config.code.clone(),
+            stock_name: name,
+            stock_code: stock_code.to_string(),
+            curr: close,
+            prev_closed: prev_close,
+            open,
+            increase,
+            highest: high,
+            lowest: low,
+            turn_over,
+            amp,
+            tm,
+        })
+    }
+}
+
+fn parse_number(value: &str) -> Result<f64> {
+    value
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| anyhow!("Failed to parse numeric value: {}", value))
 }

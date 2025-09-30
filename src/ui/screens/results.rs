@@ -173,7 +173,7 @@ fn rebuild_sorted_rows<'a>(
 
     if chart_state.show {
         if let Some(stock) = rows.get(*selected) {
-            chart_state.prepare_history(&stock.stock_code);
+            chart_state.prepare_history(&stock.stock_code, &stock.market);
         } else {
             chart_state.clear_active();
         }
@@ -196,7 +196,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
     loop {
         if chart_state.show {
             if let Some(stock) = rows_data.get(selected) {
-                chart_state.prepare_history(&stock.stock_code);
+                chart_state.prepare_history(&stock.stock_code, &stock.market);
             } else {
                 chart_state.clear_active();
             }
@@ -383,7 +383,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             if let Some(stock) = rows_data.get(selected) {
                                 chart_state.show = true;
                                 chart_state.timeframe_index = 0;
-                                chart_state.prepare_history(&stock.stock_code);
+                                chart_state.prepare_history(&stock.stock_code, &stock.market);
                             }
                         } else {
                             chart_state.next_timeframe();
@@ -452,7 +452,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
                                 }
                             }
                         }
@@ -467,7 +467,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
                                 }
                             }
                         }
@@ -482,7 +482,8 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                                 }
                                 if chart_state.show {
                                     if let Some(stock) = rows_data.get(selected) {
-                                        chart_state.prepare_history(&stock.stock_code);
+                                        chart_state
+                                            .prepare_history(&stock.stock_code, &stock.market);
                                     }
                                 }
                             }
@@ -498,7 +499,8 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                                 }
                                 if chart_state.show {
                                     if let Some(stock) = rows_data.get(selected) {
-                                        chart_state.prepare_history(&stock.stock_code);
+                                        chart_state
+                                            .prepare_history(&stock.stock_code, &stock.market);
                                     }
                                 }
                             }
@@ -510,7 +512,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             offset = 0;
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
                                 }
                             }
                         }
@@ -521,7 +523,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             offset = selected.saturating_sub(capacity.saturating_sub(1));
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code);
+                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
                                 }
                             }
                         }

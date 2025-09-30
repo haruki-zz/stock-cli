@@ -13,18 +13,20 @@ Steps
 - Build a release binary
   - `cargo build --release`
 - Prepare required files next to the binary (or run from project root)
-  - `stock_code.csv` (required, one code per line)
+  - `stock_code.csv` for the China A-share market (required, one code per line)
+  - Japanese listings are downloaded automatically on first launch and saved to `stock_codes/japan.csv`
 - Run the program
   - `./target/release/stock-cli`
 
 Notes
-- `raw_data/` is created on first fetch and stores timestamped CSVs.
-- The app errors if `stock_code.csv` is missing or empty (no built‑in defaults).
+- `raw_data/<market>/` is created on first fetch and stores timestamped CSVs per market.
+- The app errors if the configured stock code file is missing (e.g., `stock_code.csv` for CN) or empty.
 
 ## Usage
 
 Start the app
 - `stock-cli` (or `cargo run` during development)
+- Pick the desired market when prompted; data, presets, and raw CSVs are stored per market (`raw_data/<market>/`, `filters/<market>/`)
 
 Global navigation
 - ↑/↓ or j/k: move selection (vertical)

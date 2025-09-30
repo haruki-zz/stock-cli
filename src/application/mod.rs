@@ -1,15 +1,17 @@
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::config::Config;
+use crate::config::{Config, ProviderConfig, RegionConfig};
+use crate::services::fetch_japan_stock_codes;
 use crate::storage::{
     ensure_metric_thresholds, load_threshold_preset, save_threshold_preset, StockDatabase,
 };
 use crate::ui::{
-    run_csv_picker, run_fetch_progress, run_filters_menu, run_main_menu, run_preset_picker,
-    run_results_table, run_save_preset_dialog, run_thresholds_editor, FetchCancelled,
-    FilterMenuAction, MenuAction,
+    run_csv_picker, run_fetch_progress, run_filters_menu, run_main_menu, run_market_picker,
+    run_preset_picker, run_results_table, run_save_preset_dialog, run_thresholds_editor,
+    FetchCancelled, FilterMenuAction, MenuAction,
 };
 
 /// Find the most recently modified CSV file within the given directory.
@@ -39,46 +41,63 @@ fn find_latest_csv(dir: &str) -> Option<(std::path::PathBuf, String)> {
 }
 
 pub async fn run() -> Result<()> {
-    let stock_codes_path = "stock_code.csv";
-    let region = "CN";
-
     // Load configuration and region-specific metadata that drive fetching and filtering.
     let config = Config::builtin();
+    let available_regions = config.available_regions();
+
+    let selected_region_code = if available_regions.len() == 1 {
+        available_regions[0].code.clone()
+    } else {
+        let options: Vec<(String, String)> = available_regions
+            .iter()
+            .map(|region| (region.code.clone(), region.name.clone()))
+            .collect();
+        match run_market_picker(&options) {
+            Ok(code) => code,
+            Err(err) => {
+                if err.to_string().to_lowercase().contains("cancelled") {
+                    return Ok(());
+                }
+                return Err(err);
+            }
+        }
+    };
 
     let region_config = config
-        .get_region_config(region)
+        .get_region_config(&selected_region_code)
         .context("Region not found in config")?
         .clone();
 
-    let info_indices = config
-        .get_valid_info_indices(region)
-        .context("No valid info indices found")?;
+    let LoadedStockCodes {
+        codes: stock_codes,
+        names: stock_names,
+    } = prepare_stock_codes(&region_config).await?;
 
-    let mut thresholds = region_config.thre.clone();
+    let mut thresholds = region_config.thresholds.clone();
     ensure_metric_thresholds(&mut thresholds);
 
-    // Load stock codes
-    let stock_codes = load_stock_codes(stock_codes_path)?;
-
-    // Create data directories
-    let raw_data_dir = "raw_data";
-    if !Path::new(raw_data_dir).exists() {
-        fs::create_dir_all(raw_data_dir).context("Failed to create raw_data directory")?;
+    // Create per-market data directories
+    let raw_data_dir = format!("raw_data/{}", region_config.code.to_lowercase());
+    if !Path::new(&raw_data_dir).exists() {
+        fs::create_dir_all(&raw_data_dir)
+            .with_context(|| format!("Failed to create directory {}", raw_data_dir))?;
     }
-    let filters_dir = "filters";
-    if !Path::new(filters_dir).exists() {
-        fs::create_dir_all(filters_dir).context("Failed to create filters directory")?;
+    let filters_dir = format!("filters/{}", region_config.code.to_lowercase());
+    if !Path::new(&filters_dir).exists() {
+        fs::create_dir_all(&filters_dir)
+            .with_context(|| format!("Failed to create directory {}", filters_dir))?;
     }
 
     // Prepare database; load later based on user choice
     let mut database = StockDatabase::new(Vec::new());
     let mut loaded_file: Option<String> = None;
-    // Fixed subcontent top row used by legacy action screens
-    // Automatically load the most recent snapshot if available; otherwise fetch fresh data.
-    if let Some((latest_path, latest_name)) = find_latest_csv(raw_data_dir) {
+    if let Some((latest_path, latest_name)) = find_latest_csv(&raw_data_dir) {
         match StockDatabase::load_from_csv(latest_path.to_str().unwrap_or("")) {
             Ok(db) => {
-                println!("Loaded latest data from {}", latest_name);
+                println!(
+                    "Loaded latest {} data from {}",
+                    region_config.code, latest_name
+                );
                 database = db;
                 loaded_file = Some(latest_name);
             }
@@ -90,10 +109,10 @@ pub async fn run() -> Result<()> {
 
     if database.data.is_empty() {
         match run_fetch_progress(
-            raw_data_dir,
+            &raw_data_dir,
             &stock_codes,
             region_config.clone(),
-            info_indices.clone(),
+            stock_names.clone(),
         )
         .await
         {
@@ -119,16 +138,14 @@ pub async fn run() -> Result<()> {
         }
     }
 
-    // Main interactive loop using Ratatui. Each menu action owns a dedicated screen so the
-    // core loop can stay focused on state transitions rather than input handling details.
     loop {
         match run_main_menu(loaded_file.as_deref())? {
             MenuAction::Update => {
                 match run_fetch_progress(
-                    raw_data_dir,
+                    &raw_data_dir,
                     &stock_codes,
                     region_config.clone(),
-                    info_indices.clone(),
+                    stock_names.clone(),
                 )
                 .await
                 {
@@ -154,7 +171,6 @@ pub async fn run() -> Result<()> {
                 }
             }
             MenuAction::Filter => {
-                // Precompute the matching codes; the results view stays read-only.
                 let codes = database.filter_stocks(&thresholds);
                 run_results_table(&database, &codes)?;
             }
@@ -167,7 +183,7 @@ pub async fn run() -> Result<()> {
                         Some(name) => match sanitize_preset_name(&name) {
                             Some(file_name) => {
                                 if let Err(err) = save_threshold_preset(
-                                    Path::new(filters_dir),
+                                    Path::new(&filters_dir),
                                     &file_name,
                                     &thresholds,
                                 ) {
@@ -182,7 +198,7 @@ pub async fn run() -> Result<()> {
                         },
                         None => println!("Save filters cancelled."),
                     },
-                    FilterMenuAction::Load => match run_preset_picker(filters_dir)? {
+                    FilterMenuAction::Load => match run_preset_picker(&filters_dir)? {
                         Some(path) => match load_threshold_preset(Path::new(&path)) {
                             Ok(mut loaded) => {
                                 ensure_metric_thresholds(&mut loaded);
@@ -205,7 +221,7 @@ pub async fn run() -> Result<()> {
                 }
             },
             MenuAction::Load => {
-                if let Some(filename) = run_csv_picker(raw_data_dir)? {
+                if let Some(filename) = run_csv_picker(&raw_data_dir)? {
                     match StockDatabase::load_from_csv(&filename) {
                         Ok(loaded_db) => {
                             database = loaded_db;
@@ -232,28 +248,87 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
-/// Read the first column of the CSV into a list of tradable codes.
-fn load_stock_codes(file_path: &str) -> Result<Vec<String>> {
-    if !Path::new(file_path).exists() {
-        anyhow::bail!("Stock codes file not found: {}", file_path);
+/// Read the stock codes file, collecting codes and optional names.
+fn load_stock_codes(file_path: &Path) -> Result<LoadedStockCodes> {
+    if !file_path.exists() {
+        anyhow::bail!("Stock codes file not found: {}", file_path.display());
     }
 
-    let mut reader =
-        csv::Reader::from_path(file_path).context("Failed to open stock codes file")?;
+    let mut reader = csv::Reader::from_path(file_path)
+        .with_context(|| format!("Failed to open stock codes file {}", file_path.display()))?;
 
     let mut codes = Vec::new();
+    let mut names = HashMap::new();
+
     for result in reader.records() {
         let record = result.context("Failed to read CSV record")?;
-        if let Some(code) = record.get(0) {
-            codes.push(code.to_string());
+        if let Some(code_raw) = record.get(0) {
+            let code = code_raw.trim();
+            if code.is_empty() {
+                continue;
+            }
+            let code_string = code.to_string();
+            if let Some(name_raw) = record.get(1) {
+                let name = name_raw.trim();
+                if !name.is_empty() {
+                    names.insert(code_string.clone(), name.to_string());
+                }
+            }
+            codes.push(code_string);
         }
     }
 
     if codes.is_empty() {
-        anyhow::bail!("Stock codes file is empty: {}", file_path);
+        anyhow::bail!("Stock codes file is empty: {}", file_path.display());
     }
 
-    Ok(codes)
+    Ok(LoadedStockCodes { codes, names })
+}
+
+struct LoadedStockCodes {
+    codes: Vec<String>,
+    names: HashMap<String, String>,
+}
+
+async fn prepare_stock_codes(region_config: &RegionConfig) -> Result<LoadedStockCodes> {
+    let path = Path::new(&region_config.stock_code_file);
+
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create directory {}", parent.display()))?;
+            }
+        }
+
+        match &region_config.provider {
+            ProviderConfig::Stooq(_) => {
+                let entries = fetch_japan_stock_codes().await?;
+                write_stock_codes(path, &entries)?;
+            }
+            ProviderConfig::Tencent(_) => {
+                anyhow::bail!(
+                    "Stock codes file not found for region {}: {}",
+                    region_config.code,
+                    path.display()
+                );
+            }
+        }
+    }
+
+    load_stock_codes(path)
+}
+
+fn write_stock_codes(path: &Path, entries: &[(String, String)]) -> Result<()> {
+    let mut writer = csv::Writer::from_path(path)
+        .with_context(|| format!("Failed to create stock codes file {}", path.display()))?;
+
+    writer.write_record(["code", "name"])?;
+    for (code, name) in entries {
+        writer.write_record([code, name])?;
+    }
+    writer.flush()?;
+    Ok(())
 }
 
 fn sanitize_preset_name(name: &str) -> Option<String> {

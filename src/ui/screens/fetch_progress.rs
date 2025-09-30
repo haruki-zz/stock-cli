@@ -1,4 +1,4 @@
-use crate::config::{InfoIndex, RegionConfig};
+use crate::config::RegionConfig;
 use crate::services::{AsyncStockFetcher, StockData};
 use crate::storage::StockDatabase;
 use crate::ui::{components::utils::centered_rect, TerminalGuard};
@@ -22,9 +22,9 @@ pub async fn run_fetch_progress(
     raw_data_dir: &str,
     stock_codes: &[String],
     region_config: RegionConfig,
-    info_indices: std::collections::HashMap<String, InfoIndex>,
+    static_names: std::collections::HashMap<String, String>,
 ) -> Result<(Vec<StockData>, String)> {
-    let fetcher = AsyncStockFetcher::new(stock_codes.to_vec(), region_config, info_indices);
+    let fetcher = AsyncStockFetcher::new(stock_codes.to_vec(), region_config, static_names);
     let progress = fetcher.progress_counter.clone();
     let total = fetcher.total_stocks;
     let handle = tokio::spawn(async move { fetcher.fetch_data().await });

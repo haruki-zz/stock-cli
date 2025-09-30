@@ -32,37 +32,42 @@ const DATE_LABEL_FMT_MEDIUM: &str = "%Y-%m";
 pub struct ChartState {
     pub show: bool,
     pub timeframe_index: usize,
-    pub active_code: Option<String>,
+    active_key: Option<String>,
     history_cache: HashMap<String, Vec<Candle>>,
     pending_fetches: HashMap<String, HistoryReceiver>,
     last_error: Option<String>,
 }
 
 impl ChartState {
-    pub fn prepare_history(&mut self, stock_code: &str) {
-        if self.active_code.as_deref() != Some(stock_code) {
-            self.active_code = Some(stock_code.to_string());
+    pub fn prepare_history(&mut self, stock_code: &str, market: &str) {
+        let key = cache_key(market, stock_code);
+        if self.active_key.as_deref() != Some(key.as_str()) {
+            self.active_key = Some(key.clone());
             self.last_error = None;
         }
 
-        if self.history_cache.contains_key(stock_code) {
+        if self.history_cache.contains_key(key.as_str()) {
             return;
         }
 
-        if let Some(outcome) = self.pending_fetches.get(stock_code).map(|rx| rx.try_recv()) {
+        if let Some(outcome) = self
+            .pending_fetches
+            .get(key.as_str())
+            .map(|rx| rx.try_recv())
+        {
             match outcome {
                 Ok(Ok(history)) => {
-                    self.history_cache.insert(stock_code.to_string(), history);
-                    self.pending_fetches.remove(stock_code);
+                    self.history_cache.insert(key.clone(), history);
+                    self.pending_fetches.remove(key.as_str());
                     self.last_error = None;
                 }
                 Ok(Err(err)) => {
-                    self.pending_fetches.remove(stock_code);
+                    self.pending_fetches.remove(key.as_str());
                     self.last_error = Some(err.to_string());
                 }
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
-                    self.pending_fetches.remove(stock_code);
+                    self.pending_fetches.remove(key.as_str());
                     self.last_error = Some("History fetch task ended unexpectedly".to_string());
                 }
             }
@@ -72,29 +77,30 @@ impl ChartState {
         if self
             .last_error
             .as_ref()
-            .filter(|_| self.active_code.as_deref() == Some(stock_code))
+            .filter(|_| self.active_key.as_deref() == Some(key.as_str()))
             .is_some()
         {
             return;
         }
 
-        let rx = spawn_history_fetch(stock_code);
-        self.pending_fetches.insert(stock_code.to_string(), rx);
+        let rx = spawn_history_fetch(stock_code, market);
+        self.pending_fetches.insert(key, rx);
         self.last_error = None;
     }
 
-    pub fn history_for(&self, stock_code: &str) -> Option<&Vec<Candle>> {
-        self.history_cache.get(stock_code)
+    pub fn history_for(&self, market: &str, stock_code: &str) -> Option<&Vec<Candle>> {
+        let key = cache_key(market, stock_code);
+        self.history_cache.get(&key)
     }
 
     pub fn hide(&mut self) {
         self.show = false;
         self.last_error = None;
-        self.active_code = None;
+        self.active_key = None;
     }
 
     pub fn clear_active(&mut self) {
-        self.active_code = None;
+        self.active_key = None;
         self.last_error = None;
     }
 
@@ -106,13 +112,18 @@ impl ChartState {
         self.timeframe_index = (self.timeframe_index + TIMEFRAMES.len() - 1) % TIMEFRAMES.len();
     }
 
-    pub fn last_error(&self, stock_code: &str) -> Option<&str> {
-        if self.active_code.as_deref() == Some(stock_code) {
+    pub fn last_error(&self, market: &str, stock_code: &str) -> Option<&str> {
+        let key = cache_key(market, stock_code);
+        if self.active_key.as_deref() == Some(key.as_str()) {
             self.last_error.as_deref()
         } else {
             None
         }
     }
+}
+
+fn cache_key(market: &str, stock_code: &str) -> String {
+    format!("{}:{}", market, stock_code)
 }
 
 pub fn render_chart_panel(
@@ -141,7 +152,7 @@ pub fn render_chart_panel(
     let mut help_text = String::new();
 
     if let Some(stock) = stock {
-        if let Some(history) = chart.history_for(&stock.stock_code) {
+        if let Some(history) = chart.history_for(&stock.market, &stock.stock_code) {
             let (label, duration) = TIMEFRAMES[chart.timeframe_index];
             let filtered = filter_history(history, duration);
             if filtered.is_empty() {
@@ -368,7 +379,7 @@ pub fn render_chart_panel(
                     lowest.timestamp.format("%Y-%m-%d"),
                 );
             }
-        } else if let Some(message) = chart.last_error(&stock.stock_code) {
+        } else if let Some(message) = chart.last_error(&stock.market, &stock.stock_code) {
             f.render_widget(
                 Paragraph::new(message).alignment(Alignment::Center).block(
                     Block::default()

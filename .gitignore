@@ -4,10 +4,13 @@
 # Keep these at repo root
 !/.gitignore
 !/README.md
+!/AGENTS.md
 !/Cargo.toml
 !/Cargo.lock
 !/stock_code.csv
 !/build_macos_intel_release.sh
+!/docs/
+!/docs/**
 
 # Keep Rust source files under src/
 !/src/

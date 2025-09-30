@@ -78,6 +78,7 @@ impl StockDatabase {
             csv::Writer::from_path(file_path).context("Failed to create CSV writer")?;
 
         writer.write_record(&[
+            "market",
             "stockName",
             "stockCode",
             "curr",
@@ -93,6 +94,7 @@ impl StockDatabase {
 
         for stock in &self.data {
             writer.write_record(&[
+                &stock.market,
                 &stock.stock_name,
                 &stock.stock_code,
                 &stock.curr.to_string(),
@@ -120,18 +122,72 @@ impl StockDatabase {
         for result in reader.records() {
             let record = result.context("Failed to read CSV record")?;
 
+            let has_market_column = record.len() > 11;
+            let market = if has_market_column {
+                record.get(0).unwrap_or("CN").trim().to_string()
+            } else {
+                "CN".to_string()
+            };
+            let base_index = if has_market_column { 1 } else { 0 };
+
             let stock = StockData {
-                stock_name: record.get(0).unwrap_or("").to_string(),
-                stock_code: record.get(1).unwrap_or("").to_string(),
-                curr: record.get(2).unwrap_or("0").parse().unwrap_or(0.0),
-                prev_closed: record.get(3).unwrap_or("0").parse().unwrap_or(0.0),
-                open: record.get(4).unwrap_or("0").parse().unwrap_or(0.0),
-                increase: record.get(5).unwrap_or("0").parse().unwrap_or(0.0),
-                highest: record.get(6).unwrap_or("0").parse().unwrap_or(0.0),
-                lowest: record.get(7).unwrap_or("0").parse().unwrap_or(0.0),
-                turn_over: record.get(8).unwrap_or("0").parse().unwrap_or(0.0),
-                amp: record.get(9).unwrap_or("0").parse().unwrap_or(0.0),
-                tm: record.get(10).unwrap_or("0").parse().unwrap_or(0.0),
+                market,
+                stock_name: record.get(base_index).unwrap_or("").trim().to_string(),
+                stock_code: record.get(base_index + 1).unwrap_or("").trim().to_string(),
+                curr: record
+                    .get(base_index + 2)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                prev_closed: record
+                    .get(base_index + 3)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                open: record
+                    .get(base_index + 4)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                increase: record
+                    .get(base_index + 5)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                highest: record
+                    .get(base_index + 6)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                lowest: record
+                    .get(base_index + 7)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                turn_over: record
+                    .get(base_index + 8)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                amp: record
+                    .get(base_index + 9)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
+                tm: record
+                    .get(base_index + 10)
+                    .unwrap_or("0")
+                    .trim()
+                    .parse()
+                    .unwrap_or(0.0),
             };
 
             data.push(stock);

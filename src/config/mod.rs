@@ -4,7 +4,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct InfoIndex {
     pub index: usize,
-    pub valid: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,9 +33,28 @@ pub struct UrlConfig {
 
 #[derive(Debug, Clone)]
 pub struct RegionConfig {
+    pub code: String,
+    pub name: String,
+    pub stock_code_file: String,
+    pub thresholds: HashMap<String, Threshold>,
+    pub provider: ProviderConfig,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProviderConfig {
+    Tencent(TencentProviderConfig),
+    Stooq(StooqProviderConfig),
+}
+
+#[derive(Debug, Clone)]
+pub struct TencentProviderConfig {
     pub info_idxs: HashMap<String, InfoIndex>,
-    pub thre: HashMap<String, Threshold>,
     pub urls: UrlConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct StooqProviderConfig {
+    pub symbol_suffix: String,
 }
 
 #[derive(Debug, Clone)]
@@ -47,83 +65,17 @@ pub struct Config {
 impl Config {
     pub fn builtin() -> Self {
         let info_idxs = HashMap::from([
-            (
-                "stockName".to_string(),
-                InfoIndex {
-                    index: 1,
-                    valid: true,
-                },
-            ),
-            (
-                "stockCode".to_string(),
-                InfoIndex {
-                    index: 2,
-                    valid: true,
-                },
-            ),
-            (
-                "curr".to_string(),
-                InfoIndex {
-                    index: 3,
-                    valid: true,
-                },
-            ),
-            (
-                "prevClosed".to_string(),
-                InfoIndex {
-                    index: 4,
-                    valid: true,
-                },
-            ),
-            (
-                "open".to_string(),
-                InfoIndex {
-                    index: 5,
-                    valid: true,
-                },
-            ),
-            (
-                "increase".to_string(),
-                InfoIndex {
-                    index: 32,
-                    valid: true,
-                },
-            ),
-            (
-                "highest".to_string(),
-                InfoIndex {
-                    index: 33,
-                    valid: true,
-                },
-            ),
-            (
-                "lowest".to_string(),
-                InfoIndex {
-                    index: 34,
-                    valid: true,
-                },
-            ),
-            (
-                "turnOver".to_string(),
-                InfoIndex {
-                    index: 38,
-                    valid: true,
-                },
-            ),
-            (
-                "amp".to_string(),
-                InfoIndex {
-                    index: 43,
-                    valid: true,
-                },
-            ),
-            (
-                "tm".to_string(),
-                InfoIndex {
-                    index: 44,
-                    valid: true,
-                },
-            ),
+            ("stockName".to_string(), InfoIndex { index: 1 }),
+            ("stockCode".to_string(), InfoIndex { index: 2 }),
+            ("curr".to_string(), InfoIndex { index: 3 }),
+            ("prevClosed".to_string(), InfoIndex { index: 4 }),
+            ("open".to_string(), InfoIndex { index: 5 }),
+            ("increase".to_string(), InfoIndex { index: 32 }),
+            ("highest".to_string(), InfoIndex { index: 33 }),
+            ("lowest".to_string(), InfoIndex { index: 34 }),
+            ("turnOver".to_string(), InfoIndex { index: 38 }),
+            ("amp".to_string(), InfoIndex { index: 43 }),
+            ("tm".to_string(), InfoIndex { index: 44 }),
         ]);
 
         let thre = HashMap::from([
@@ -176,23 +128,76 @@ impl Config {
             ),
         ]);
 
-        let region = RegionConfig {
-            info_idxs,
-            thre,
-            urls: UrlConfig {
-                request: RequestConfig {
-                    prefix: "http://ifzq.gtimg.cn/appstock/app/kline/mkline?param=".to_string(),
-                    suffix: ",m1,,10".to_string(),
-                    headers,
+        let region_cn = RegionConfig {
+            code: "CN".to_string(),
+            name: "China A-Shares".to_string(),
+            stock_code_file: "stock_code.csv".to_string(),
+            thresholds: thre,
+            provider: ProviderConfig::Tencent(TencentProviderConfig {
+                info_idxs,
+                urls: UrlConfig {
+                    request: RequestConfig {
+                        prefix: "http://ifzq.gtimg.cn/appstock/app/kline/mkline?param=".to_string(),
+                        suffix: ",m1,,10".to_string(),
+                        headers,
+                    },
+                    firewall_warning: FirewallWarning {
+                        text: "window.location.href=\"https://waf.tencent.com/501page.html?u="
+                            .to_string(),
+                    },
                 },
-                firewall_warning: FirewallWarning {
-                    text: "window.location.href=\"https://waf.tencent.com/501page.html?u="
-                        .to_string(),
-                },
-            },
+            }),
         };
 
-        let regions = HashMap::from([("CN".to_string(), region)]);
+        let jp_thresholds = HashMap::from([
+            (
+                "increase".to_string(),
+                Threshold {
+                    lower: -5.0,
+                    upper: 5.0,
+                    valid: false,
+                },
+            ),
+            (
+                "amp".to_string(),
+                Threshold {
+                    lower: 0.0,
+                    upper: 10.0,
+                    valid: false,
+                },
+            ),
+            (
+                "turnOver".to_string(),
+                Threshold {
+                    lower: 0.0,
+                    upper: 0.0,
+                    valid: false,
+                },
+            ),
+            (
+                "tm".to_string(),
+                Threshold {
+                    lower: 0.0,
+                    upper: 0.0,
+                    valid: false,
+                },
+            ),
+        ]);
+
+        let region_jp = RegionConfig {
+            code: "JP".to_string(),
+            name: "Japan Stocks".to_string(),
+            stock_code_file: "stock_codes/japan.csv".to_string(),
+            thresholds: jp_thresholds,
+            provider: ProviderConfig::Stooq(StooqProviderConfig {
+                symbol_suffix: ".jp".to_string(),
+            }),
+        };
+
+        let regions = HashMap::from([
+            (region_cn.code.clone(), region_cn),
+            (region_jp.code.clone(), region_jp),
+        ]);
 
         Config { regions }
     }
@@ -202,15 +207,9 @@ impl Config {
         self.regions.get(region_code)
     }
 
-    /// Return only the `infoIdxs` entries that are marked `valid` for the region.
-    pub fn get_valid_info_indices(&self, region_code: &str) -> Option<HashMap<String, InfoIndex>> {
-        self.get_region_config(region_code).map(|config| {
-            config
-                .info_idxs
-                .iter()
-                .filter(|(_, info)| info.valid)
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()
-        })
+    pub fn available_regions(&self) -> Vec<&RegionConfig> {
+        let mut regions: Vec<&RegionConfig> = self.regions.values().collect();
+        regions.sort_by(|a, b| a.code.cmp(&b.code));
+        regions
     }
 }

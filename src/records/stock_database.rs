@@ -1,9 +1,11 @@
-use anyhow::{Context, Result};
-use chrono::{DateTime, Local};
 use std::collections::HashMap;
+use std::path::Path;
+
+use crate::error::{Context, Result};
 
 use crate::config::Threshold;
-use crate::services::StockData;
+use crate::fetch::StockData;
+use crate::utils::current_human_timestamp;
 
 /// Key/label pairs for all numeric metrics that can be filtered by thresholds.
 pub const FILTERABLE_METRICS: &[(&str, &str)] = &[
@@ -18,7 +20,7 @@ pub const FILTERABLE_METRICS: &[(&str, &str)] = &[
     ("tm", "TM"),
 ];
 
-/// Ensure every expected metric has a threshold entry so the editor can expose it.
+/// Ensure every expected metric has a threshold entry so downstream views remain in sync.
 pub fn ensure_metric_thresholds(thresholds: &mut HashMap<String, Threshold>) {
     for (key, _) in FILTERABLE_METRICS {
         thresholds
@@ -60,22 +62,21 @@ impl StockDatabase {
 
     pub fn update(&mut self, new_data: Vec<StockData>) {
         self.data = new_data;
-        let now: DateTime<Local> = Local::now();
         use std::io::{self, Write};
         let mut out = io::stdout();
         // Emit a timestamped note so the user sees when the buffer last refreshed.
         let _ = write!(
             out,
             "Stock information is updated on {}.\r\n",
-            now.format("%Y-%m-%d %H:%M")
+            current_human_timestamp()
         );
         let _ = out.flush();
     }
 
     /// Persist the current snapshot to disk so it can be reloaded by the CLI later.
-    pub fn save_to_csv(&self, file_path: &str) -> Result<()> {
-        let mut writer =
-            csv::Writer::from_path(file_path).context("Failed to create CSV writer")?;
+    pub fn save_to_csv<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
+        let path = file_path.as_ref();
+        let mut writer = csv::Writer::from_path(path).context("Failed to create CSV writer")?;
 
         writer.write_record(&[
             "market",
@@ -114,8 +115,9 @@ impl StockDatabase {
     }
 
     /// Load a snapshot produced by `save_to_csv` back into memory.
-    pub fn load_from_csv(file_path: &str) -> Result<Self> {
-        let mut reader = csv::Reader::from_path(file_path).context("Failed to open CSV file")?;
+    pub fn load_from_csv<P: AsRef<Path>>(file_path: P) -> Result<Self> {
+        let path = file_path.as_ref();
+        let mut reader = csv::Reader::from_path(path).context("Failed to open CSV file")?;
 
         let mut data = Vec::new();
 

@@ -1,30 +1,16 @@
 use crate::config::RegionConfig;
-use crate::services::{AsyncStockFetcher, StockData};
-use crate::storage::StockDatabase;
+use crate::error::{AppError, Result};
+use crate::fetch::{SnapshotFetcher, StockData};
 use crate::ui::{components::utils::centered_rect, TerminalGuard};
-use anyhow::{anyhow, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 
-/// Marker error used when the user aborts the fetch mid-flight.
-#[derive(Debug)]
-pub struct FetchCancelled;
-
-impl std::fmt::Display for FetchCancelled {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Fetch cancelled by user")
-    }
-}
-
-impl std::error::Error for FetchCancelled {}
-
 pub async fn run_fetch_progress(
-    snapshots_dir: &str,
     stock_codes: &[String],
     region_config: RegionConfig,
     static_names: std::collections::HashMap<String, String>,
-) -> Result<(Vec<StockData>, String)> {
-    let fetcher = AsyncStockFetcher::new(stock_codes.to_vec(), region_config, static_names);
+) -> Result<Vec<StockData>> {
+    let fetcher = SnapshotFetcher::new(stock_codes.to_vec(), region_config, static_names);
     let progress = fetcher.progress_counter.clone();
     let total = fetcher.total_stocks;
     let handle = tokio::spawn(async move { fetcher.fetch_data().await });
@@ -102,18 +88,11 @@ pub async fn run_fetch_progress(
     if cancelled {
         guard.restore()?;
         let _ = handle.await;
-        return Err(FetchCancelled.into());
+        return Err(AppError::Cancelled);
     }
 
-    let res = handle
-        .await
-        .map_err(|e| anyhow!("Fetch task failed: {}", e))?;
+    let res = handle.await?;
     let data = res?;
-    let timestamp = chrono::Local::now().format("%Y_%m_%d_%H_%M");
-    let database = StockDatabase::new(data.clone());
-    let filename = format!("{}/{}_raw.csv", snapshots_dir, timestamp);
-    database.save_to_csv(&filename)?;
-
     guard.terminal_mut().draw(|f| {
         let size = f.size();
         let area = centered_rect(60, 20, size);
@@ -122,9 +101,8 @@ pub async fn run_fetch_progress(
         f.render_widget(block.clone(), area);
         let inner = block.inner(area);
         let msg = Paragraph::new(format!(
-            "Fetched {} records. Saved to {}\nPress Enter to continue.",
-            data.len(),
-            filename
+            "Fetched {} records.\nPress Enter to continue.",
+            data.len()
         ))
         .alignment(Alignment::Center);
         f.render_widget(msg, inner);
@@ -148,5 +126,5 @@ pub async fn run_fetch_progress(
     }
 
     guard.restore()?;
-    Ok((data, filename))
+    Ok(data)
 }

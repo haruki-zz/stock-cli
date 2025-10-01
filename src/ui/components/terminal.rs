@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 use crossterm::{execute, terminal, ExecutableCommand};
 use ratatui::{backend::CrosstermBackend, Terminal};
 

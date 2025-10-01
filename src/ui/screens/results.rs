@@ -1,11 +1,11 @@
-use anyhow::Result;
+use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::{convert::TryFrom, time::Duration};
 use unicode_width::UnicodeWidthStr;
 
-use crate::services::StockData;
-use crate::storage::StockDatabase;
+use crate::fetch::StockData;
+use crate::records::StockDatabase;
 use crate::ui::{
     components::chart::{self, ChartState},
     TerminalGuard,

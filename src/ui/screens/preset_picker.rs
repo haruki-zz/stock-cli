@@ -1,9 +1,10 @@
-use anyhow::Result;
+use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
-use crate::ui::{components::utils::list_json_files, TerminalGuard};
+use crate::ui::TerminalGuard;
+use crate::utils::{format_file_modified, list_json_files};
 
 pub fn run_preset_picker(dir: &str) -> Result<Option<String>> {
     let mut guard = TerminalGuard::new()?;
@@ -28,13 +29,12 @@ pub fn run_preset_picker(dir: &str) -> Result<Option<String>> {
             let items: Vec<ListItem> = files
                 .iter()
                 .enumerate()
-                .map(|(i, (name, _path, modified, size_bytes))| {
-                    let dt: chrono::DateTime<chrono::Local> = (*modified).into();
-                    let kb = (*size_bytes as f64) / 1024.0;
+                .map(|(i, entry)| {
+                    let kb = (entry.size as f64) / 1024.0;
                     let text = format!(
                         "{:<24}  {}  {:>6.1} KB",
-                        name,
-                        dt.format("%Y-%m-%d %H:%M"),
+                        entry.name,
+                        format_file_modified(entry.modified),
                         kb
                     );
                     let mut line = Line::from(text);
@@ -67,9 +67,9 @@ pub fn run_preset_picker(dir: &str) -> Result<Option<String>> {
                         selected = (selected + 1) % files.len();
                     }
                     KeyCode::Enter => {
-                        let path = files[selected].1.to_string_lossy().to_string();
+                        let path = files[selected].path.clone();
                         guard.restore()?;
-                        return Ok(Some(path));
+                        return Ok(Some(path.to_string_lossy().to_string()));
                     }
                     KeyCode::Esc => {
                         guard.restore()?;

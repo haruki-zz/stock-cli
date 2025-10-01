@@ -1,11 +1,11 @@
-use anyhow::Result;
+use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
 use crate::{
     config::Threshold,
-    storage::{ensure_metric_thresholds, FILTERABLE_METRICS},
+    records::{ensure_metric_thresholds, FILTERABLE_METRICS},
     ui::{components::utils::centered_rect, TerminalGuard},
 };
 

@@ -9,10 +9,7 @@ use ratatui::{
 };
 use std::{cmp::Ordering, collections::HashMap, sync::mpsc::TryRecvError};
 
-use crate::services::{
-    history::{spawn_history_fetch, Candle, HistoryReceiver},
-    StockData,
-};
+use crate::fetch::{spawn_history_fetch, Candle, HistoryReceiver, StockData};
 
 const TIMEFRAMES: &[(&str, ChronoDuration)] = &[
     ("1Y", ChronoDuration::weeks(52)),

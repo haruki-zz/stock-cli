@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
@@ -89,8 +89,8 @@ pub fn run_main_menu(
                     region_code, region_name
                 ),
             };
-            let header = Paragraph::new(header_text)
-                .style(Style::default().fg(Color::Rgb(230, 121, 0)));
+            let header =
+                Paragraph::new(header_text).style(Style::default().fg(Color::Rgb(230, 121, 0)));
             f.render_widget(header, chunks[0]);
 
             let list_items: Vec<ListItem> = items

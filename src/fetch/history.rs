@@ -1,16 +1,17 @@
-use anyhow::{Context, Result};
+use std::io::Cursor;
+use std::sync::mpsc::{self, Receiver};
+use std::thread;
+use std::time::Duration;
+
+use crate::error::{AppError, Context};
 use chrono::{Local, LocalResult, NaiveDate, TimeZone};
 use reqwest::{
     blocking::Client,
     header::{ACCEPT_LANGUAGE, REFERER, USER_AGENT},
 };
 use serde_json::Value;
-use std::{
-    io::Cursor,
-    sync::mpsc::{self, Receiver},
-    thread,
-    time::Duration,
-};
+
+use crate::fetch::FetchResult;
 
 const HISTORY_ENDPOINT: &str = "https://ifzq.gtimg.cn/appstock/app/kline/kline";
 const HISTORY_REFERER: &str = "https://gu.qq.com/";
@@ -22,7 +23,7 @@ const STOOQ_HISTORY_ENDPOINT: &str = "https://stooq.com/q/d/l/";
 const STOOQ_SYMBOL_SUFFIX_JP: &str = ".jp";
 
 #[derive(Clone)]
-pub(crate) struct Candle {
+pub struct Candle {
     pub timestamp: chrono::DateTime<Local>,
     pub open: f64,
     pub high: f64,
@@ -30,9 +31,9 @@ pub(crate) struct Candle {
     pub close: f64,
 }
 
-pub(crate) type HistoryReceiver = Receiver<Result<Vec<Candle>>>;
+pub type HistoryReceiver = Receiver<FetchResult<Vec<Candle>>>;
 
-pub(crate) fn spawn_history_fetch(stock_code: &str, market: &str) -> HistoryReceiver {
+pub fn spawn_history_fetch(stock_code: &str, market: &str) -> HistoryReceiver {
     let code = stock_code.to_string();
     let market_code = market.to_string();
     let (tx, rx) = mpsc::channel();
@@ -48,7 +49,7 @@ pub(crate) fn spawn_history_fetch(stock_code: &str, market: &str) -> HistoryRece
     rx
 }
 
-fn fetch_price_history_tencent(stock_code: &str) -> Result<Vec<Candle>> {
+fn fetch_price_history_tencent(stock_code: &str) -> FetchResult<Vec<Candle>> {
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -139,13 +140,16 @@ fn fetch_price_history_tencent(stock_code: &str) -> Result<Vec<Candle>> {
     candles.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
     if candles.is_empty() {
-        anyhow::bail!("No historical data for {}", stock_code);
+        return Err(AppError::message(format!(
+            "No historical data for {}",
+            stock_code
+        )));
     }
 
     Ok(candles)
 }
 
-fn fetch_price_history_stooq(stock_code: &str) -> Result<Vec<Candle>> {
+fn fetch_price_history_stooq(stock_code: &str) -> FetchResult<Vec<Candle>> {
     let symbol = format!("{}{}", stock_code.to_lowercase(), STOOQ_SYMBOL_SUFFIX_JP);
     let url = format!(
         "{endpoint}?s={symbol}&i=d&h=1&e=csv",
@@ -157,11 +161,11 @@ fn fetch_price_history_stooq(stock_code: &str) -> Result<Vec<Candle>> {
         .with_context(|| format!("History request failed for {}", stock_code))?;
 
     if !response.status().is_success() {
-        anyhow::bail!(
+        return Err(AppError::message(format!(
             "History request returned error status {} for {}",
             response.status(),
             stock_code
-        );
+        )));
     }
 
     let body = response
@@ -229,7 +233,10 @@ fn fetch_price_history_stooq(stock_code: &str) -> Result<Vec<Candle>> {
     candles.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
     if candles.is_empty() {
-        anyhow::bail!("No historical data for {}", stock_code);
+        return Err(AppError::message(format!(
+            "No historical data for {}",
+            stock_code
+        )));
     }
 
     Ok(candles)

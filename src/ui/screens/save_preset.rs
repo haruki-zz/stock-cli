@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;

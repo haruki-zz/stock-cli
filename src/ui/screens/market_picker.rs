@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use crate::error::{AppError, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
@@ -7,7 +7,7 @@ use crate::ui::TerminalGuard;
 
 pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
     if options.is_empty() {
-        return Err(anyhow!("No stock markets are available"));
+        return Err(AppError::message("No stock markets are available"));
     }
 
     let mut guard = TerminalGuard::new()?;
@@ -25,9 +25,8 @@ pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
                 ])
                 .split(size);
 
-            let title =
-                Paragraph::new("Select a stock market")
-                    .style(Style::default().fg(Color::Rgb(230, 121, 0)));
+            let title = Paragraph::new("Select a stock market")
+                .style(Style::default().fg(Color::Rgb(230, 121, 0)));
             f.render_widget(title, area[0]);
 
             let items: Vec<ListItem> = options
@@ -82,11 +81,11 @@ pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
                     }
                     KeyCode::Esc => {
                         guard.restore()?;
-                        return Err(anyhow!("Market selection cancelled"));
+                        return Err(AppError::Cancelled);
                     }
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         guard.restore()?;
-                        return Err(anyhow!("Market selection cancelled"));
+                        return Err(AppError::Cancelled);
                     }
                     _ => {}
                 },

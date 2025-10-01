@@ -1,15 +1,18 @@
 use chrono::{Duration as ChronoDuration, Local};
+use ratatui::prelude::Stylize;
+use ratatui::text::Line as TextLine;
 use ratatui::{
     prelude::*,
     symbols::Marker,
     widgets::{
-        canvas::{Canvas, Line, Rectangle},
+        canvas::{Canvas, Line as CanvasLine, Rectangle},
         Block, Borders, Paragraph, Wrap,
     },
 };
 use std::{cmp::Ordering, collections::HashMap, sync::mpsc::TryRecvError};
 
 use crate::fetch::{spawn_history_fetch, Candle, HistoryReceiver, StockData};
+use crate::ui::components::utils::split_vertical;
 
 const TIMEFRAMES: &[(&str, ChronoDuration)] = &[
     ("1Y", ChronoDuration::weeks(52)),
@@ -130,14 +133,14 @@ pub fn render_chart_panel(
     chart: &ChartState,
     stock: Option<&StockData>,
 ) {
-    let segments = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
+    let segments = split_vertical(
+        area,
+        &[
             Constraint::Min(3),
             Constraint::Length(3),
             Constraint::Length(footer_height),
-        ])
-        .split(area);
+        ],
+    );
     let chart_area = Rect {
         x: segments[0].x,
         y: segments[0].y,
@@ -304,7 +307,7 @@ pub fn render_chart_panel(
                                 Color::Red
                             };
 
-                            ctx.draw(&Line {
+                            ctx.draw(&CanvasLine {
                                 x1: x,
                                 y1: low,
                                 x2: x,
@@ -315,7 +318,7 @@ pub fn render_chart_panel(
                             let body_top = open.max(close);
                             let body_bottom = open.min(close);
                             if (body_top - body_bottom).abs() < BODY_EPSILON {
-                                ctx.draw(&Line {
+                                ctx.draw(&CanvasLine {
                                     x1: x - half_wick,
                                     y1: body_top,
                                     x2: x + half_wick,
@@ -334,14 +337,14 @@ pub fn render_chart_panel(
                         }
 
                         ctx.layer();
-                        ctx.draw(&Line {
+                        ctx.draw(&CanvasLine {
                             x1: axis_x,
                             y1: axis_y,
                             x2: axis_x_end,
                             y2: axis_y,
                             color: axis_color,
                         });
-                        ctx.draw(&Line {
+                        ctx.draw(&CanvasLine {
                             x1: axis_x,
                             y1: axis_y,
                             x2: axis_x,
@@ -409,9 +412,7 @@ pub fn render_chart_panel(
     }
 
     f.render_widget(
-        Paragraph::new(help_text)
-            .style(Style::default().fg(Color::Gray))
-            .wrap(Wrap { trim: true }),
+        Paragraph::new(TextLine::from(help_text).gray()).wrap(Wrap { trim: true }),
         help_area,
     );
 }

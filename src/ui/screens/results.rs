@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::{convert::TryFrom, time::Duration};
 use unicode_width::UnicodeWidthStr;
@@ -7,7 +8,12 @@ use unicode_width::UnicodeWidthStr;
 use crate::fetch::StockData;
 use crate::records::StockDatabase;
 use crate::ui::{
-    components::chart::{self, ChartState},
+    components::{
+        build_table,
+        chart::{self, ChartState},
+        highlight_row,
+        utils::split_vertical,
+    },
     TerminalGuard,
 };
 
@@ -210,22 +216,22 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
         guard.terminal_mut().draw(|f| {
             let area_full = f.size();
             let (list_area, chart_area) = if chart_state.show {
-                let segments = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
+                let segments = split_vertical(
+                    area_full,
+                    &[
                         Constraint::Percentage(40),
                         Constraint::Percentage(60),
-                    ])
-                    .split(area_full);
+                    ],
+                );
                 (segments[0], Some(segments[1]))
             } else {
                 (area_full, None)
             };
 
-            let list_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(3), Constraint::Length(footer_height)])
-                .split(list_area);
+            let list_chunks = split_vertical(
+                list_area,
+                &[Constraint::Min(3), Constraint::Length(footer_height)],
+            );
             let table_area = list_chunks[0];
             let footer_area = list_chunks[1];
 
@@ -261,11 +267,12 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                         Cell::from(format!("{:.2}", stock.amp)),
                         Cell::from(format!("{:.2}", stock.tm)),
                     ];
-                    let mut row = Row::new(cells);
+                    let row = Row::new(cells);
                     if offset + i == selected {
-                        row = row.style(Style::default().add_modifier(Modifier::REVERSED));
+                        highlight_row(row)
+                    } else {
+                        row
                     }
-                    row
                 })
                 .collect::<Vec<_>>();
 
@@ -291,10 +298,9 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                     if field.map(|f| f == sort_state.field).unwrap_or(false) {
                         content.push(' ');
                         content.push_str(sort_state.direction_icon());
-                        Cell::from(content)
-                            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+                        Cell::from(content).yellow().bold()
                     } else {
-                        Cell::from(content).style(Style::default().fg(Color::Yellow))
+                        Cell::from(content).yellow()
                     }
                 })
                 .collect();
@@ -334,14 +340,12 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 Constraint::Length(14),
             ];
 
-            let table = Table::new(base_rows, widths)
-                .header(header)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                    .title(format!("Filtered Results ({} rows)", total)),
-            )
-            .column_spacing(0);
+            let table = build_table(
+                base_rows,
+                header,
+                widths,
+                format!("Filtered Results ({} rows)", total),
+            );
             f.render_widget(table, table_area);
 
         let footer_text = if total == 0 {
@@ -375,9 +379,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
         };
         if footer_area.height > 0 {
             f.render_widget(
-                Paragraph::new(footer_text)
-                    .style(Style::default().fg(Color::Gray))
-                    .wrap(Wrap { trim: true }),
+                Paragraph::new(Line::from(footer_text).gray()).wrap(Wrap { trim: true }),
                 footer_area,
             );
         }

@@ -1,12 +1,17 @@
 use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::prelude::Stylize;
+use ratatui::text::Line as TextLine;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
 use crate::{
     config::Threshold,
     records::{ensure_metric_thresholds, FILTERABLE_METRICS},
-    ui::{components::utils::centered_rect, TerminalGuard},
+    ui::{
+        components::utils::{centered_rect, split_vertical},
+        TerminalGuard,
+    },
 };
 
 pub fn run_thresholds_editor(
@@ -74,25 +79,21 @@ pub fn run_thresholds_editor(
     loop {
         guard.terminal_mut().draw(|f| {
             let size = f.size();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(2),
-                    Constraint::Min(1),
-                    Constraint::Length(1),
-                ])
-                .split(size);
+            let chunks = split_vertical(
+                size,
+                &[Constraint::Length(2), Constraint::Min(1), Constraint::Length(1)],
+            );
 
             let title = Paragraph::new(
                 "Edit thresholds — \u{2191}/\u{2193}/j/k move • Space toggles selected metric • Enter edit • Esc back",
             )
-            .style(Style::default().fg(Color::Rgb(230, 121, 0)));
+            .fg(Color::Rgb(230, 121, 0));
             f.render_widget(title, chunks[0]);
 
             let total_items = keys.len() + 1;
             let mut list_items = Vec::with_capacity(total_items);
             for idx in 0..total_items {
-                let (mut item, base_style) = if idx < keys.len() {
+                let mut item = if idx < keys.len() {
                     let key = &keys[idx];
                     let thr = thresholds.get(key).unwrap();
                     let display_name = FILTERABLE_METRICS
@@ -107,22 +108,19 @@ pub fn run_thresholds_editor(
                         thr.upper,
                         if thr.valid { "ON" } else { "OFF" }
                     );
-                    let base_style = if thr.valid {
-                        Style::default()
+                    let line = if thr.valid {
+                        TextLine::from(label)
                     } else {
-                        Style::default().fg(Color::DarkGray)
+                        TextLine::from(label).fg(Color::DarkGray)
                     };
-                    (ListItem::new(label), base_style)
+                    ListItem::new(line)
                 } else {
-                    (ListItem::new("Back"), Style::default())
+                    ListItem::new(TextLine::from("Back"))
                 };
 
-                let final_style = if idx == selected {
-                    base_style.add_modifier(Modifier::REVERSED)
-                } else {
-                    base_style
-                };
-                item = item.style(final_style);
+                if idx == selected {
+                    item = item.style(Style::default().add_modifier(Modifier::REVERSED));
+                }
                 list_items.push(item);
             }
 
@@ -131,8 +129,7 @@ pub fn run_thresholds_editor(
             f.render_widget(list, chunks[1]);
 
             f.render_widget(
-                Paragraph::new("Enter edit • Space toggles ON/OFF • Esc back")
-                    .style(Style::default().fg(Color::Gray)),
+                Paragraph::new("Enter edit • Space toggles ON/OFF • Esc back".gray()),
                 chunks[2],
             );
 
@@ -158,15 +155,15 @@ pub fn run_thresholds_editor(
                     .title(format!("Edit '{}'", display_title));
                 f.render_widget(block.clone(), area);
                 let inner = block.inner(area);
-                let v = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
+                let v = split_vertical(
+                    inner,
+                    &[
                         Constraint::Length(1),
                         Constraint::Length(1),
                         Constraint::Length(1),
                         Constraint::Length(1),
-                    ])
-                    .split(inner);
+                    ],
+                );
                 let l_style = if *field == 0 {
                     Style::default().add_modifier(Modifier::REVERSED)
                 } else {

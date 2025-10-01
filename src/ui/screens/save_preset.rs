@@ -1,9 +1,12 @@
 use crate::error::Result;
+use crate::ui::{
+    components::utils::{centered_rect, split_vertical},
+    TerminalGuard,
+};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
-
-use crate::ui::{components::utils::centered_rect, TerminalGuard};
 
 /// Prompt the user for a preset name inside the application's alternate screen.
 pub fn run_save_preset_dialog() -> Result<Option<String>> {
@@ -23,29 +26,28 @@ pub fn run_save_preset_dialog() -> Result<Option<String>> {
             f.render_widget(block.clone(), area);
             let inner = block.inner(area);
 
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
+            let chunks = split_vertical(
+                inner,
+                &[
                     Constraint::Length(3),
                     Constraint::Length(3),
                     Constraint::Min(1),
-                ])
-                .split(inner);
+                ],
+            );
 
             let instructions =
-                Paragraph::new("Allowed characters: letters, numbers, space, '-' and '_'")
-                    .style(Style::default().fg(Color::Gray));
+                Paragraph::new("Allowed characters: letters, numbers, space, '-' and '_'".gray());
             f.render_widget(instructions, chunks[0]);
 
             let mut display = buffer.clone();
             display.push('_');
             let input = Paragraph::new(display)
-                .style(Style::default().fg(Color::Yellow))
+                .yellow()
                 .block(Block::default().borders(Borders::ALL).title("Preset name"));
             f.render_widget(input, chunks[1]);
 
             let message = error.unwrap_or("Enter to save • Esc to cancel • Backspace delete");
-            let message_widget = Paragraph::new(message).style(Style::default().fg(Color::Gray));
+            let message_widget = Paragraph::new(message.gray());
             f.render_widget(message_widget, chunks[2]);
         })?;
 

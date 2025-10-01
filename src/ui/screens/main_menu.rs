@@ -1,9 +1,9 @@
 use crate::error::Result;
+use crate::ui::{components::utils::split_vertical, TerminalGuard};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
-
-use crate::ui::TerminalGuard;
 
 /// Logical actions triggered from the main menu screen.
 #[derive(Debug, Clone, PartialEq)]
@@ -70,14 +70,14 @@ pub fn run_main_menu(
     loop {
         guard.terminal_mut().draw(|f| {
             let size = f.size();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
+            let chunks = split_vertical(
+                size,
+                &[
                     Constraint::Length(3),
                     Constraint::Min(1),
                     Constraint::Length(1),
-                ])
-                .split(size);
+                ],
+            );
 
             let header_text = match loaded_file {
                 Some(name) if !name.is_empty() => format!(
@@ -89,27 +89,25 @@ pub fn run_main_menu(
                     region_code, region_name
                 ),
             };
-            let header =
-                Paragraph::new(header_text).style(Style::default().fg(Color::Rgb(230, 121, 0)));
+            let header = Paragraph::new(header_text).fg(Color::Rgb(230, 121, 0));
             f.render_widget(header, chunks[0]);
 
             let list_items: Vec<ListItem> = items
                 .iter()
                 .enumerate()
                 .map(|(i, (label, description, _))| {
-                    let line = Line::from(vec![
-                        Span::styled(
-                            format!("{:<18}", label),
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw("  "),
-                        Span::styled(*description, Style::default().fg(Color::Gray)),
-                    ]);
-                    let mut item = ListItem::new(line);
+                    let line: Line = vec![
+                        Span::from(format!("{:<18}", label)).bold(),
+                        "  ".into(),
+                        Span::from(*description).gray(),
+                    ]
+                    .into();
+                    let item = ListItem::new(line);
                     if i == selected {
-                        item = item.style(Style::default().add_modifier(Modifier::REVERSED));
+                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                    } else {
+                        item
                     }
-                    item
                 })
                 .collect();
             let list = List::new(list_items).block(
@@ -119,9 +117,9 @@ pub fn run_main_menu(
             );
             f.render_widget(list, chunks[1]);
 
-            let help =
-                Paragraph::new("↑/↓ or j/k navigate • Enter select • Esc back • Ctrl+C exit")
-                    .style(Style::default().fg(Color::Gray));
+            let help = Paragraph::new(
+                "↑/↓ or j/k navigate • Enter select • Esc back • Ctrl+C exit".gray(),
+            );
             f.render_widget(help, chunks[2]);
         })?;
 
@@ -186,36 +184,35 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
     loop {
         guard.terminal_mut().draw(|f| {
             let size = f.size();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
+            let chunks = split_vertical(
+                size,
+                &[
                     Constraint::Length(3),
                     Constraint::Min(1),
                     Constraint::Length(1),
-                ])
-                .split(size);
+                ],
+            );
 
-            let title = Paragraph::new("Filters — manage threshold presets")
-                .style(Style::default().fg(Color::Rgb(230, 121, 0)));
+            let title =
+                Paragraph::new("Filters — manage threshold presets").fg(Color::Rgb(230, 121, 0));
             f.render_widget(title, chunks[0]);
 
             let list_items: Vec<ListItem> = entries
                 .iter()
                 .enumerate()
                 .map(|(i, (label, description, _))| {
-                    let line = Line::from(vec![
-                        Span::styled(
-                            format!("{:<18}", label),
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw("  "),
-                        Span::styled(*description, Style::default().fg(Color::Gray)),
-                    ]);
-                    let mut item = ListItem::new(line);
+                    let line: Line = vec![
+                        Span::from(format!("{:<18}", label)).bold(),
+                        "  ".into(),
+                        Span::from(*description).gray(),
+                    ]
+                    .into();
+                    let item = ListItem::new(line);
                     if i == selected {
-                        item = item.style(Style::default().add_modifier(Modifier::REVERSED));
+                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                    } else {
+                        item
                     }
-                    item
                 })
                 .collect();
 
@@ -226,8 +223,7 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
             );
             f.render_widget(list, chunks[1]);
 
-            let help = Paragraph::new("↑/↓ or j/k navigate • Enter select • Esc back")
-                .style(Style::default().fg(Color::Gray));
+            let help = Paragraph::new("↑/↓ or j/k navigate • Enter select • Esc back".gray());
             f.render_widget(help, chunks[2]);
         })?;
 

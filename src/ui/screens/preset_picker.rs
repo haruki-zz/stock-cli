@@ -1,10 +1,10 @@
 use crate::error::Result;
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::{prelude::*, widgets::*};
-use std::time::Duration;
-
 use crate::ui::TerminalGuard;
 use crate::utils::{format_file_modified, list_json_files};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::text::Line as TextLine;
+use ratatui::{prelude::*, widgets::*};
+use std::time::Duration;
 
 pub fn run_preset_picker(dir: &str) -> Result<Option<String>> {
     let mut guard = TerminalGuard::new()?;
@@ -37,11 +37,12 @@ pub fn run_preset_picker(dir: &str) -> Result<Option<String>> {
                         format_file_modified(entry.modified),
                         kb
                     );
-                    let mut line = Line::from(text);
+                    let item = ListItem::new(TextLine::from(text));
                     if i == selected {
-                        line = line.style(Style::default().add_modifier(Modifier::REVERSED));
+                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                    } else {
+                        item
                     }
-                    ListItem::new(line)
                 })
                 .collect();
 

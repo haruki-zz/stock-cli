@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::ui::TerminalGuard;
 use crate::utils::{format_file_modified, list_csv_files};
+use ratatui::text::Line as TextLine;
 
 pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
     // Protect terminal state while the picker owns the screen.
@@ -40,11 +41,12 @@ pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
                         format_file_modified(entry.modified),
                         kb
                     );
-                    let mut line = Line::from(text);
+                    let item = ListItem::new(TextLine::from(text));
                     if i == selected {
-                        line = line.style(Style::default().add_modifier(Modifier::REVERSED));
+                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                    } else {
+                        item
                     }
-                    ListItem::new(line)
                 })
                 .collect();
             let list = List::new(items).block(

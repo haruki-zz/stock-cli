@@ -1,8 +1,12 @@
 use crate::config::RegionConfig;
 use crate::error::{AppError, Result};
 use crate::fetch::{SnapshotFetcher, StockData};
-use crate::ui::{components::utils::centered_rect, TerminalGuard};
+use crate::ui::{
+    components::utils::{centered_rect, split_vertical},
+    TerminalGuard,
+};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 
 pub async fn run_fetch_progress(
@@ -36,14 +40,14 @@ pub async fn run_fetch_progress(
                 .title("Fetching latest data...");
             f.render_widget(block.clone(), area);
             let inner = block.inner(area);
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
+            let chunks = split_vertical(
+                inner,
+                &[
                     Constraint::Length(1),
                     Constraint::Length(1),
                     Constraint::Length(1),
-                ])
-                .split(inner);
+                ],
+            );
             let label = format!(
                 "Progress: {} / {} ({:.0}%)",
                 done.min(total),
@@ -59,9 +63,7 @@ pub async fn run_fetch_progress(
                 chunks[1],
             );
             f.render_widget(
-                Paragraph::new("Esc to cancel")
-                    .style(Style::default().fg(Color::Gray))
-                    .alignment(Alignment::Center),
+                Paragraph::new("Esc to cancel".gray()).alignment(Alignment::Center),
                 chunks[2],
             );
         })?;

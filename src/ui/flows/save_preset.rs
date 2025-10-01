@@ -1,10 +1,10 @@
 use crate::error::Result;
+use crate::ui::styles::{secondary_line, ACCENT};
 use crate::ui::{
     components::utils::{centered_rect, split_vertical},
-    TerminalGuard,
+    TerminalGuard, UiRoute,
 };
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
@@ -20,9 +20,10 @@ pub fn run_save_preset_dialog() -> Result<Option<String>> {
             let area = centered_rect(60, 30, size);
             f.render_widget(Clear, area);
 
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .title("Save Filters — Enter preset name");
+            let block = Block::default().borders(Borders::ALL).title(format!(
+                "{} — Enter preset name",
+                UiRoute::SavePreset.title()
+            ));
             f.render_widget(block.clone(), area);
             let inner = block.inner(area);
 
@@ -35,19 +36,20 @@ pub fn run_save_preset_dialog() -> Result<Option<String>> {
                 ],
             );
 
-            let instructions =
-                Paragraph::new("Allowed characters: letters, numbers, space, '-' and '_'".gray());
+            let instructions = Paragraph::new(secondary_line(
+                "Allowed characters: letters, numbers, space, '-' and '_'",
+            ));
             f.render_widget(instructions, chunks[0]);
 
             let mut display = buffer.clone();
             display.push('_');
             let input = Paragraph::new(display)
-                .yellow()
+                .style(Style::default().fg(ACCENT))
                 .block(Block::default().borders(Borders::ALL).title("Preset name"));
             f.render_widget(input, chunks[1]);
 
             let message = error.unwrap_or("Enter to save • Esc to cancel • Backspace delete");
-            let message_widget = Paragraph::new(message.gray());
+            let message_widget = Paragraph::new(secondary_line(message));
             f.render_widget(message_widget, chunks[2]);
         })?;
 

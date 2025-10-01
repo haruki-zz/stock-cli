@@ -5,12 +5,13 @@ use ratatui::text::Line as TextLine;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
+use crate::ui::styles::{header_text, secondary_line, selection_style};
 use crate::{
     config::Threshold,
     records::{ensure_metric_thresholds, FILTERABLE_METRICS},
     ui::{
         components::utils::{centered_rect, split_vertical},
-        TerminalGuard,
+        TerminalGuard, UiRoute,
     },
 };
 
@@ -84,10 +85,9 @@ pub fn run_thresholds_editor(
                 &[Constraint::Length(2), Constraint::Min(1), Constraint::Length(1)],
             );
 
-            let title = Paragraph::new(
+            let title = Paragraph::new(header_text(
                 "Edit thresholds — \u{2191}/\u{2193}/j/k move • Space toggles selected metric • Enter edit • Esc back",
-            )
-            .fg(Color::Rgb(230, 121, 0));
+            ));
             f.render_widget(title, chunks[0]);
 
             let total_items = keys.len() + 1;
@@ -111,7 +111,7 @@ pub fn run_thresholds_editor(
                     let line = if thr.valid {
                         TextLine::from(label)
                     } else {
-                        TextLine::from(label).fg(Color::DarkGray)
+                        TextLine::from(label).dim()
                     };
                     ListItem::new(line)
                 } else {
@@ -119,17 +119,22 @@ pub fn run_thresholds_editor(
                 };
 
                 if idx == selected {
-                    item = item.style(Style::default().add_modifier(Modifier::REVERSED));
+                    item = item.style(selection_style());
                 }
                 list_items.push(item);
             }
 
-            let list = List::new(list_items)
-                .block(Block::default().borders(Borders::ALL).title("Thresholds"));
+            let list = List::new(list_items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(UiRoute::Thresholds.title()),
+            );
             f.render_widget(list, chunks[1]);
 
             f.render_widget(
-                Paragraph::new("Enter edit • Space toggles ON/OFF • Esc back".gray()),
+                Paragraph::new(secondary_line(
+                    "Enter edit • Space toggles ON/OFF • Esc back",
+                )),
                 chunks[2],
             );
 
@@ -164,30 +169,22 @@ pub fn run_thresholds_editor(
                         Constraint::Length(1),
                     ],
                 );
-                let l_style = if *field == 0 {
-                    Style::default().add_modifier(Modifier::REVERSED)
-                } else {
+                let mut l_style = Style::default();
+                if *field == 0 {
+                    l_style = l_style.patch(selection_style());
+                }
+                let mut u_style = Style::default();
+                if *field == 1 {
+                    u_style = u_style.patch(selection_style());
+                }
+                let mut status_style = if *valid {
                     Style::default()
-                };
-                let u_style = if *field == 1 {
-                    Style::default().add_modifier(Modifier::REVERSED)
                 } else {
-                    Style::default()
+                    Style::default().add_modifier(Modifier::DIM)
                 };
-                let status_style = if *valid {
-                    if *field == 2 {
-                        Style::default().add_modifier(Modifier::REVERSED)
-                    } else {
-                        Style::default()
-                    }
-                } else {
-                    let base = Style::default().fg(Color::DarkGray);
-                    if *field == 2 {
-                        base.add_modifier(Modifier::REVERSED)
-                    } else {
-                        base
-                    }
-                };
+                if *field == 2 {
+                    status_style = status_style.patch(selection_style());
+                }
                 let lower_text = if lower.is_empty() {
                     format!("{:.2}", orig_lower)
                 } else {
@@ -215,10 +212,9 @@ pub fn run_thresholds_editor(
                     v[2],
                 );
                 f.render_widget(
-                    Paragraph::new(
+                    Paragraph::new(secondary_line(
                         "Enter save • Space toggle • Esc cancel • Tab/↑/↓/j/k switch",
-                    )
-                    .style(Style::default().fg(Color::Gray)),
+                    )),
                     v[3],
                 );
             }

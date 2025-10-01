@@ -1,9 +1,10 @@
 use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::{prelude::*, widgets::*};
+use ratatui::widgets::*;
 use std::time::Duration;
 
-use crate::ui::TerminalGuard;
+use crate::ui::styles::{secondary_line, selection_style};
+use crate::ui::{TerminalGuard, UiRoute};
 use crate::utils::{format_file_modified, list_csv_files};
 use ratatui::text::Line as TextLine;
 
@@ -16,9 +17,14 @@ pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
         // Surface a transient message instead of leaving the user on a blank screen.
         guard.terminal_mut().draw(|f| {
             let size = f.size();
-            let block =
-                Paragraph::new("No CSV files in assets/snapshots/. Use 'Refresh Data' to fetch.")
-                    .block(Block::default().borders(Borders::ALL).title("Load CSV"));
+            let block = Paragraph::new(secondary_line(
+                "No CSV files in assets/snapshots/. Use 'Refresh Data' to fetch.",
+            ))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(UiRoute::CsvPicker.title()),
+            );
             f.render_widget(block, size);
         })?;
         std::thread::sleep(std::time::Duration::from_millis(1200));
@@ -43,7 +49,7 @@ pub fn run_csv_picker(dir: &str) -> Result<Option<String>> {
                     );
                     let item = ListItem::new(TextLine::from(text));
                     if i == selected {
-                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                        item.style(selection_style())
                     } else {
                         item
                     }

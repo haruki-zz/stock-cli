@@ -1,12 +1,12 @@
 use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::{convert::TryFrom, time::Duration};
 use unicode_width::UnicodeWidthStr;
 
 use crate::fetch::StockData;
 use crate::records::StockDatabase;
+use crate::ui::styles::{secondary_line, ACCENT};
 use crate::ui::{
     components::{
         build_table,
@@ -14,7 +14,7 @@ use crate::ui::{
         highlight_row,
         utils::split_vertical,
     },
-    TerminalGuard,
+    TerminalGuard, UiRoute,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -295,13 +295,13 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 .iter()
                 .map(|(label, field)| {
                     let mut content = (*label).to_string();
+                    let mut style = Style::default().fg(ACCENT);
                     if field.map(|f| f == sort_state.field).unwrap_or(false) {
                         content.push(' ');
                         content.push_str(sort_state.direction_icon());
-                        Cell::from(content).yellow().bold()
-                    } else {
-                        Cell::from(content).yellow()
+                        style = style.add_modifier(Modifier::BOLD);
                     }
+                    Cell::from(content).style(style)
                 })
                 .collect();
 
@@ -344,7 +344,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 base_rows,
                 header,
                 widths,
-                format!("Filtered Results ({} rows)", total),
+                format!("{} ({} rows)", UiRoute::Results.title(), total),
             );
             f.render_widget(table, table_area);
 
@@ -379,7 +379,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
         };
         if footer_area.height > 0 {
             f.render_widget(
-                Paragraph::new(Line::from(footer_text).gray()).wrap(Wrap { trim: true }),
+                Paragraph::new(secondary_line(footer_text.clone())).wrap(Wrap { trim: true }),
                 footer_area,
             );
         }

@@ -1,12 +1,12 @@
 use crate::config::RegionConfig;
 use crate::error::{AppError, Result};
 use crate::fetch::{SnapshotFetcher, StockData};
+use crate::ui::styles::{header_text, secondary_line};
 use crate::ui::{
     components::utils::{centered_rect, split_vertical},
-    TerminalGuard,
+    TerminalGuard, UiRoute,
 };
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 
 pub async fn run_fetch_progress(
@@ -37,7 +37,7 @@ pub async fn run_fetch_progress(
             f.render_widget(Clear, area);
             let block = Block::default()
                 .borders(Borders::ALL)
-                .title("Fetching latest data...");
+                .title(UiRoute::FetchProgress.title());
             f.render_widget(block.clone(), area);
             let inner = block.inner(area);
             let chunks = split_vertical(
@@ -55,7 +55,8 @@ pub async fn run_fetch_progress(
                 ratio * 100.0
             );
             f.render_widget(
-                Paragraph::new("Please wait while we fetch data").alignment(Alignment::Center),
+                Paragraph::new(header_text("Please wait while we fetch data"))
+                    .alignment(Alignment::Center),
                 chunks[0],
             );
             f.render_widget(
@@ -63,7 +64,7 @@ pub async fn run_fetch_progress(
                 chunks[1],
             );
             f.render_widget(
-                Paragraph::new("Esc to cancel".gray()).alignment(Alignment::Center),
+                Paragraph::new(secondary_line("Esc to cancel")).alignment(Alignment::Center),
                 chunks[2],
             );
         })?;
@@ -102,10 +103,10 @@ pub async fn run_fetch_progress(
         let block = Block::default().borders(Borders::ALL).title("Done");
         f.render_widget(block.clone(), area);
         let inner = block.inner(area);
-        let msg = Paragraph::new(format!(
+        let msg = Paragraph::new(header_text(format!(
             "Fetched {} records.\nPress Enter to continue.",
             data.len()
-        ))
+        )))
         .alignment(Alignment::Center);
         f.render_widget(msg, inner);
     })?;

@@ -3,7 +3,8 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
-use crate::ui::TerminalGuard;
+use crate::ui::styles::{header_text, secondary_line, selection_style};
+use crate::ui::{TerminalGuard, UiRoute};
 
 pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
     if options.is_empty() {
@@ -25,8 +26,7 @@ pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
                 ])
                 .split(size);
 
-            let title = Paragraph::new("Select a stock market")
-                .style(Style::default().fg(Color::Rgb(230, 121, 0)));
+            let title = Paragraph::new(header_text(UiRoute::MarketPicker.title()));
             f.render_widget(title, area[0]);
 
             let items: Vec<ListItem> = options
@@ -34,16 +34,13 @@ pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
                 .enumerate()
                 .map(|(idx, (code, name))| {
                     let line = Line::from(vec![
-                        Span::styled(
-                            format!("{:<4}", code),
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw("  "),
-                        Span::raw(name.as_str()),
+                        Span::from(format!("{:<4}", code)).bold(),
+                        "  ".into(),
+                        Span::from(name.as_str()),
                     ]);
                     let mut item = ListItem::new(line);
                     if idx == selected {
-                        item = item.style(Style::default().add_modifier(Modifier::REVERSED));
+                        item = item.style(selection_style());
                     }
                     item
                 })
@@ -52,12 +49,13 @@ pub fn run_market_picker(options: &[(String, String)]) -> Result<String> {
             let list = List::new(items).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Markets (↑/↓ or j/k)"),
+                    .title(UiRoute::MarketPicker.title()),
             );
             f.render_widget(list, area[1]);
 
-            let help = Paragraph::new("Enter select • Esc cancel • Ctrl+C exit")
-                .style(Style::default().fg(Color::Gray));
+            let help = Paragraph::new(secondary_line(
+                "↑/↓ or j/k move • Enter select • Esc cancel • Ctrl+C exit",
+            ));
             f.render_widget(help, area[2]);
         })?;
 

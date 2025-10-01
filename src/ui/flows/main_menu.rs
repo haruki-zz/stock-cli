@@ -1,28 +1,12 @@
 use crate::error::Result;
-use crate::ui::{components::utils::split_vertical, TerminalGuard};
+use crate::ui::styles::{header_text, secondary_line, secondary_span, selection_style};
+use crate::ui::{
+    components::utils::split_vertical, FilterMenuAction, MenuAction, TerminalGuard, UiRoute,
+};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::prelude::Stylize;
 use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
-
-/// Logical actions triggered from the main menu screen.
-#[derive(Debug, Clone, PartialEq)]
-pub enum MenuAction {
-    Update,
-    Filter,
-    Filters,
-    Load,
-    SwitchRegion,
-    Exit,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum FilterMenuAction {
-    Adjust,
-    Save,
-    Load,
-    Back,
-}
 
 pub fn run_main_menu(
     loaded_file: Option<&str>,
@@ -64,7 +48,7 @@ pub fn run_main_menu(
         ));
     }
 
-    items.push(("Quit", "Exit Stock CLI", MenuAction::Exit));
+    items.push((UiRoute::Exit.title(), "Exit Stock CLI", MenuAction::Exit));
     let mut selected = 0usize;
 
     loop {
@@ -79,7 +63,7 @@ pub fn run_main_menu(
                 ],
             );
 
-            let header_text = match loaded_file {
+            let header_content = match loaded_file {
                 Some(name) if !name.is_empty() => format!(
                     "Stock CLI — Main Menu\nRegion: {} — {}\nData file: {}",
                     region_code, region_name, name
@@ -89,7 +73,7 @@ pub fn run_main_menu(
                     region_code, region_name
                 ),
             };
-            let header = Paragraph::new(header_text).fg(Color::Rgb(230, 121, 0));
+            let header = Paragraph::new(header_text(header_content));
             f.render_widget(header, chunks[0]);
 
             let list_items: Vec<ListItem> = items
@@ -99,12 +83,12 @@ pub fn run_main_menu(
                     let line: Line = vec![
                         Span::from(format!("{:<18}", label)).bold(),
                         "  ".into(),
-                        Span::from(*description).gray(),
+                        secondary_span(*description),
                     ]
                     .into();
                     let item = ListItem::new(line);
                     if i == selected {
-                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                        item.style(selection_style())
                     } else {
                         item
                     }
@@ -113,13 +97,13 @@ pub fn run_main_menu(
             let list = List::new(list_items).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Menu (↑/↓ or j/k)"),
+                    .title(UiRoute::MainMenu.title()),
             );
             f.render_widget(list, chunks[1]);
 
-            let help = Paragraph::new(
-                "↑/↓ or j/k navigate • Enter select • Esc back • Ctrl+C exit".gray(),
-            );
+            let help = Paragraph::new(secondary_line(
+                "↑/↓ or j/k navigate • Enter select • Esc back • Ctrl+C exit",
+            ));
             f.render_widget(help, chunks[2]);
         })?;
 
@@ -193,8 +177,7 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
                 ],
             );
 
-            let title =
-                Paragraph::new("Filters — manage threshold presets").fg(Color::Rgb(230, 121, 0));
+            let title = Paragraph::new(header_text("Filters — manage threshold presets"));
             f.render_widget(title, chunks[0]);
 
             let list_items: Vec<ListItem> = entries
@@ -204,12 +187,12 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
                     let line: Line = vec![
                         Span::from(format!("{:<18}", label)).bold(),
                         "  ".into(),
-                        Span::from(*description).gray(),
+                        secondary_span(*description),
                     ]
                     .into();
                     let item = ListItem::new(line);
                     if i == selected {
-                        item.style(Style::default().add_modifier(Modifier::REVERSED))
+                        item.style(selection_style())
                     } else {
                         item
                     }
@@ -219,11 +202,13 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
             let list = List::new(list_items).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Filters (↑/↓ or j/k)"),
+                    .title(UiRoute::FiltersMenu.title()),
             );
             f.render_widget(list, chunks[1]);
 
-            let help = Paragraph::new("↑/↓ or j/k navigate • Enter select • Esc back".gray());
+            let help = Paragraph::new(secondary_line(
+                "↑/↓ or j/k navigate • Enter select • Esc back",
+            ));
             f.render_widget(help, chunks[2]);
         })?;
 

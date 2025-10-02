@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+mod cn;
+mod jp;
+
 #[derive(Debug, Clone)]
 pub struct InfoIndex {
     pub index: usize,
@@ -26,9 +29,49 @@ pub struct FirewallWarning {
 }
 
 #[derive(Debug, Clone)]
-pub struct UrlConfig {
+pub struct TencentSnapshotConfig {
     pub request: RequestConfig,
     pub firewall_warning: FirewallWarning,
+}
+
+#[derive(Debug, Clone)]
+pub struct TencentHistoryConfig {
+    pub endpoint: String,
+    pub referer: String,
+    pub user_agent: String,
+    pub accept_language: String,
+    pub record_days: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TencentProviderConfig {
+    pub info_idxs: HashMap<String, InfoIndex>,
+    pub snapshot: TencentSnapshotConfig,
+    pub history: TencentHistoryConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct StooqSnapshotConfig {
+    pub quote_endpoint: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StooqHistoryConfig {
+    pub endpoint: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StooqProviderConfig {
+    pub symbol_suffix: String,
+    pub snapshot: StooqSnapshotConfig,
+    pub history: StooqHistoryConfig,
+    pub listings_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProviderConfig {
+    Tencent(TencentProviderConfig),
+    Stooq(StooqProviderConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -41,165 +84,18 @@ pub struct RegionConfig {
 }
 
 #[derive(Debug, Clone)]
-pub enum ProviderConfig {
-    Tencent(TencentProviderConfig),
-    Stooq(StooqProviderConfig),
-}
-
-#[derive(Debug, Clone)]
-pub struct TencentProviderConfig {
-    pub info_idxs: HashMap<String, InfoIndex>,
-    pub urls: UrlConfig,
-}
-
-#[derive(Debug, Clone)]
-pub struct StooqProviderConfig {
-    pub symbol_suffix: String,
-}
-
-#[derive(Debug, Clone)]
 pub struct Config {
     pub regions: HashMap<String, RegionConfig>,
 }
 
 impl Config {
     pub fn builtin() -> Self {
-        let info_idxs = HashMap::from([
-            ("stockName".to_string(), InfoIndex { index: 1 }),
-            ("stockCode".to_string(), InfoIndex { index: 2 }),
-            ("curr".to_string(), InfoIndex { index: 3 }),
-            ("prevClosed".to_string(), InfoIndex { index: 4 }),
-            ("open".to_string(), InfoIndex { index: 5 }),
-            ("increase".to_string(), InfoIndex { index: 32 }),
-            ("highest".to_string(), InfoIndex { index: 33 }),
-            ("lowest".to_string(), InfoIndex { index: 34 }),
-            ("turnOver".to_string(), InfoIndex { index: 38 }),
-            ("amp".to_string(), InfoIndex { index: 43 }),
-            ("tm".to_string(), InfoIndex { index: 44 }),
-        ]);
+        let cn = cn::region();
+        let jp = jp::region();
 
-        let thre = HashMap::from([
-            (
-                "amp".to_string(),
-                Threshold {
-                    lower: 3.0,
-                    upper: 6.0,
-                    valid: false,
-                },
-            ),
-            (
-                "turnOver".to_string(),
-                Threshold {
-                    lower: 5.0,
-                    upper: 10.0,
-                    valid: true,
-                },
-            ),
-            (
-                "tm".to_string(),
-                Threshold {
-                    lower: 50.0,
-                    upper: 120.0,
-                    valid: true,
-                },
-            ),
-            (
-                "increase".to_string(),
-                Threshold {
-                    lower: 3.0,
-                    upper: 5.0,
-                    valid: true,
-                },
-            ),
-        ]);
+        let regions = HashMap::from([(cn.code.clone(), cn), (jp.code.clone(), jp)]);
 
-        let headers = HashMap::from([
-            (
-                "User-Agent".to_string(),
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36".to_string(),
-            ),
-            (
-                "Referer".to_string(),
-                "http://ifzq.gtimg.cn/appstock/app/kline".to_string(),
-            ),
-            (
-                "Accept-Language".to_string(),
-                "en-US,en;q=0.9".to_string(),
-            ),
-        ]);
-
-        let region_cn = RegionConfig {
-            code: "CN".to_string(),
-            name: "China A-Shares".to_string(),
-            stock_code_file: "stock_code.csv".to_string(),
-            thresholds: thre,
-            provider: ProviderConfig::Tencent(TencentProviderConfig {
-                info_idxs,
-                urls: UrlConfig {
-                    request: RequestConfig {
-                        prefix: "http://ifzq.gtimg.cn/appstock/app/kline/mkline?param=".to_string(),
-                        suffix: ",m1,,10".to_string(),
-                        headers,
-                    },
-                    firewall_warning: FirewallWarning {
-                        text: "window.location.href=\"https://waf.tencent.com/501page.html?u="
-                            .to_string(),
-                    },
-                },
-            }),
-        };
-
-        let jp_thresholds = HashMap::from([
-            (
-                "increase".to_string(),
-                Threshold {
-                    lower: -5.0,
-                    upper: 5.0,
-                    valid: false,
-                },
-            ),
-            (
-                "amp".to_string(),
-                Threshold {
-                    lower: 0.0,
-                    upper: 10.0,
-                    valid: false,
-                },
-            ),
-            (
-                "turnOver".to_string(),
-                Threshold {
-                    lower: 0.0,
-                    upper: 0.0,
-                    valid: false,
-                },
-            ),
-            (
-                "tm".to_string(),
-                Threshold {
-                    lower: 0.0,
-                    upper: 0.0,
-                    valid: false,
-                },
-            ),
-        ]);
-
-        let region_jp = RegionConfig {
-            code: "JP".to_string(),
-            name: "Japan Stocks".to_string(),
-            stock_code_file: "stock_codes/japan.csv".to_string(),
-            thresholds: jp_thresholds,
-            provider: ProviderConfig::Stooq(StooqProviderConfig {
-                symbol_suffix: ".jp".to_string(),
-            }),
-        };
-
-        let regions = HashMap::from([
-            (region_cn.code.clone(), region_cn),
-            (region_jp.code.clone(), region_jp),
-        ]);
-
-        Config { regions }
+        Self { regions }
     }
 
     /// Retrieve the full region configuration, including disabled entries.

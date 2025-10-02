@@ -12,10 +12,6 @@ use tokio::time::{sleep, Duration};
 use crate::config::{ProviderConfig, RegionConfig, StooqProviderConfig, TencentProviderConfig};
 use crate::fetch::{ensure_concurrency_limit, FetchResult, SNAPSHOT_CONCURRENCY_LIMIT};
 
-const STOOQ_QUOTE_ENDPOINT: &str = "https://stooq.com/q/l/";
-const JP_LISTING_URL: &str =
-    "https://www.jpx.co.jp/english/markets/statistics-equities/misc/tvdivq0000001vg2-att/jyoujyou(updated)_e.xlsx";
-
 #[derive(Debug, Clone)]
 /// Canonical representation of a single stock row returned by the remote endpoint.
 pub struct StockData {
@@ -127,7 +123,7 @@ impl SnapshotFetcher {
     ) -> FetchResult<StockData> {
         let url = format!(
             "{}{}{}",
-            cfg.urls.request.prefix, stock_code, cfg.urls.request.suffix
+            cfg.snapshot.request.prefix, stock_code, cfg.snapshot.request.suffix
         );
 
         let mut retry_count = 0;
@@ -139,7 +135,7 @@ impl SnapshotFetcher {
                 .get(&url)
                 .headers({
                     let mut headers = reqwest::header::HeaderMap::new();
-                    for (key, value) in &cfg.urls.request.headers {
+                    for (key, value) in &cfg.snapshot.request.headers {
                         if let (Ok(header_name), Ok(header_value)) = (
                             reqwest::header::HeaderName::from_bytes(key.as_bytes()),
                             reqwest::header::HeaderValue::from_str(value),
@@ -170,7 +166,7 @@ impl SnapshotFetcher {
                     if response.status().is_success() {
                         let text = response.text().await?;
 
-                        if text.contains(&cfg.urls.firewall_warning.text) {
+                        if text.contains(&cfg.snapshot.firewall_warning.text) {
                             return Err(AppError::message(format!(
                                 "Request for stock {} was blocked by firewall",
                                 stock_code
@@ -293,7 +289,7 @@ impl SnapshotFetcher {
         let symbol = format!("{}{}", stock_code.to_lowercase(), cfg.symbol_suffix);
         let url = format!(
             "{endpoint}?s={symbol}&f=sd2t2ohlcpv&h=1&e=csv",
-            endpoint = STOOQ_QUOTE_ENDPOINT,
+            endpoint = cfg.snapshot.quote_endpoint,
             symbol = symbol
         );
 
@@ -376,8 +372,10 @@ fn parse_number(value: &str) -> FetchResult<f64> {
 }
 
 /// Download the latest JPX-listed securities and return (code, name) pairs.
-pub async fn fetch_japan_stock_codes() -> FetchResult<Vec<(String, String)>> {
-    let response = reqwest::get(JP_LISTING_URL)
+pub async fn fetch_japan_stock_codes(
+    cfg: &StooqProviderConfig,
+) -> FetchResult<Vec<(String, String)>> {
+    let response = reqwest::get(&cfg.listings_url)
         .await
         .context("Failed to request JPX listings")?;
 

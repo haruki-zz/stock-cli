@@ -3,6 +3,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
+use crate::config::{Config, ProviderConfig, StooqProviderConfig, TencentHistoryConfig};
 use crate::error::{AppError, Context};
 use chrono::{Local, LocalResult, NaiveDate, TimeZone};
 use reqwest::{
@@ -12,15 +13,6 @@ use reqwest::{
 use serde_json::Value;
 
 use crate::fetch::FetchResult;
-
-const HISTORY_ENDPOINT: &str = "https://ifzq.gtimg.cn/appstock/app/kline/kline";
-const HISTORY_REFERER: &str = "https://gu.qq.com/";
-const HISTORY_USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
-const HISTORY_ACCEPT_LANGUAGE: &str = "en-US,en;q=0.9";
-const HISTORY_RECORD_DAYS: usize = 420;
-const STOOQ_HISTORY_ENDPOINT: &str = "https://stooq.com/q/d/l/";
-const STOOQ_SYMBOL_SUFFIX_JP: &str = ".jp";
 
 #[derive(Clone)]
 pub struct Candle {
@@ -36,12 +28,21 @@ pub type HistoryReceiver = Receiver<FetchResult<Vec<Candle>>>;
 pub fn spawn_history_fetch(stock_code: &str, market: &str) -> HistoryReceiver {
     let code = stock_code.to_string();
     let market_code = market.to_string();
+    let region_config = Config::builtin().get_region_config(&market_code).cloned();
     let (tx, rx) = mpsc::channel();
 
     thread::spawn(move || {
-        let result = match market_code.as_str() {
-            "JP" => fetch_price_history_stooq(&code),
-            _ => fetch_price_history_tencent(&code),
+        let result = match region_config {
+            Some(region) => match &region.provider {
+                ProviderConfig::Tencent(provider) => {
+                    fetch_price_history_tencent(&code, &provider.history)
+                }
+                ProviderConfig::Stooq(provider) => fetch_price_history_stooq(&code, provider),
+            },
+            None => Err(AppError::message(format!(
+                "Unknown market: {}",
+                market_code
+            ))),
         };
         let _ = tx.send(result);
     });
@@ -49,21 +50,24 @@ pub fn spawn_history_fetch(stock_code: &str, market: &str) -> HistoryReceiver {
     rx
 }
 
-fn fetch_price_history_tencent(stock_code: &str) -> FetchResult<Vec<Candle>> {
+fn fetch_price_history_tencent(
+    stock_code: &str,
+    cfg: &TencentHistoryConfig,
+) -> FetchResult<Vec<Candle>> {
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .context("Failed to construct history HTTP client")?;
     let url = format!(
         "{}?param={},day,,,{}",
-        HISTORY_ENDPOINT, stock_code, HISTORY_RECORD_DAYS
+        cfg.endpoint, stock_code, cfg.record_days
     );
 
     let response = client
         .get(&url)
-        .header(USER_AGENT, HISTORY_USER_AGENT)
-        .header(REFERER, HISTORY_REFERER)
-        .header(ACCEPT_LANGUAGE, HISTORY_ACCEPT_LANGUAGE)
+        .header(USER_AGENT, cfg.user_agent.as_str())
+        .header(REFERER, cfg.referer.as_str())
+        .header(ACCEPT_LANGUAGE, cfg.accept_language.as_str())
         .send()
         .with_context(|| format!("History request failed for {}", stock_code))?
         .error_for_status()
@@ -149,11 +153,14 @@ fn fetch_price_history_tencent(stock_code: &str) -> FetchResult<Vec<Candle>> {
     Ok(candles)
 }
 
-fn fetch_price_history_stooq(stock_code: &str) -> FetchResult<Vec<Candle>> {
-    let symbol = format!("{}{}", stock_code.to_lowercase(), STOOQ_SYMBOL_SUFFIX_JP);
+fn fetch_price_history_stooq(
+    stock_code: &str,
+    cfg: &StooqProviderConfig,
+) -> FetchResult<Vec<Candle>> {
+    let symbol = format!("{}{}", stock_code.to_lowercase(), cfg.symbol_suffix);
     let url = format!(
         "{endpoint}?s={symbol}&i=d&h=1&e=csv",
-        endpoint = STOOQ_HISTORY_ENDPOINT,
+        endpoint = cfg.history.endpoint,
         symbol = symbol
     );
 

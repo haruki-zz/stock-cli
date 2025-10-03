@@ -14,7 +14,7 @@ pub fn build_table<'a>(
     Table::new(rows, widths)
         .header(header)
         .block(Block::default().borders(Borders::ALL).title(title.into()))
-        .column_spacing(0)
+        .column_spacing(2)
 }
 
 pub fn highlight_row<'a>(row: Row<'a>) -> Row<'a> {

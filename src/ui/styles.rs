@@ -10,7 +10,7 @@ pub const ACCENT: Color = Color::Indexed(208);
 /// Build a styled text block for headers.
 pub fn header_text<'a>(text: impl Into<Cow<'a, str>>) -> Text<'a> {
     let owned = text.into().into_owned();
-    Text::from(owned.bold().fg(ACCENT))
+    Text::from(owned).bold().fg(ACCENT)
 }
 
 /// Produce a dimmed line for secondary descriptions and hints.

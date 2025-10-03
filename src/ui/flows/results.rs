@@ -248,25 +248,42 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 offset = max_offset;
             }
 
+            let row_contents: Vec<[String; 12]> = rows_data
+                .iter()
+                .map(|stock| {
+                    [
+                        stock.stock_name.clone(),
+                        stock.stock_code.clone(),
+                        "│".to_string(),
+                        format!("{:.2}", stock.curr),
+                        format!("{:.2}", stock.prev_closed),
+                        format!("{:.2}", stock.open),
+                        format!("{:.2}", stock.increase),
+                        format!("{:.2}", stock.highest),
+                        format!("{:.2}", stock.lowest),
+                        format!("{:.2}", stock.turn_over),
+                        format!("{:.2}", stock.amp),
+                        format!("{:.2}", stock.tm),
+                    ]
+                })
+                .collect();
+
             let visible_end = (offset + capacity).min(total);
-            let base_rows = rows_data[offset..visible_end]
+            let base_rows = row_contents[offset..visible_end]
                 .iter()
                 .enumerate()
-                .map(|(i, stock)| {
-                    let cells = vec![
-                        Cell::from(stock.stock_name.clone()),
-                        Cell::from(stock.stock_code.clone()),
-                        Cell::from("│"),
-                        Cell::from(format!("{:.2}", stock.curr)),
-                        Cell::from(format!("{:.2}", stock.prev_closed)),
-                        Cell::from(format!("{:.2}", stock.open)),
-                        Cell::from(format!("{:.2}", stock.increase)),
-                        Cell::from(format!("{:.2}", stock.highest)),
-                        Cell::from(format!("{:.2}", stock.lowest)),
-                        Cell::from(format!("{:.2}", stock.turn_over)),
-                        Cell::from(format!("{:.2}", stock.amp)),
-                        Cell::from(format!("{:.2}", stock.tm)),
-                    ];
+                .map(|(i, columns)| {
+                    let cells = columns
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, content)| {
+                            if idx >= 2 {
+                                Cell::from(Text::from(content.clone()).alignment(Alignment::Right))
+                            } else {
+                                Cell::from(content.clone())
+                            }
+                        })
+                        .collect::<Vec<_>>();
                     let row = Row::new(cells);
                     if offset + i == selected {
                         highlight_row(row)
@@ -291,54 +308,42 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 ("Total Market", Some(SortField::TotalMarket)),
             ];
 
-            let header_cells: Vec<Cell> = header_columns
-                .iter()
-                .map(|(label, field)| {
-                    let mut content = (*label).to_string();
-                    let mut style = Style::default().fg(ACCENT);
-                    if field.map(|f| f == sort_state.field).unwrap_or(false) {
-                        content.push(' ');
-                        content.push_str(sort_state.direction_icon());
-                        style = style.add_modifier(Modifier::BOLD);
-                    }
-                    Cell::from(content).style(style)
-                })
-                .collect();
+            let mut header_cells = Vec::with_capacity(header_columns.len());
+            let mut header_widths = Vec::with_capacity(header_columns.len());
+            for (idx, (label, field)) in header_columns.iter().enumerate() {
+                let mut style = Style::default().fg(ACCENT);
+                let content = if field.map(|f| f == sort_state.field).unwrap_or(false) {
+                    style = style.add_modifier(Modifier::BOLD);
+                    format!("{} {}", sort_state.direction_icon(), label)
+                } else {
+                    (*label).to_string()
+                };
+                header_widths.push(UnicodeWidthStr::width(content.as_str()));
+                let cell = if idx >= 2 {
+                    Cell::from(Text::from(content.clone()).alignment(Alignment::Right)).style(style)
+                } else {
+                    Cell::from(content.clone()).style(style)
+                };
+                header_cells.push(cell);
+            }
 
             let header = Row::new(header_cells);
 
-            let name_header_width = UnicodeWidthStr::width(header_columns[0].0);
-            let code_header_width = UnicodeWidthStr::width(header_columns[1].0);
-            let name_data_width = rows_data
-                .iter()
-                .map(|stock| UnicodeWidthStr::width(stock.stock_name.as_str()))
-                .max()
-                .unwrap_or(0);
-            let code_data_width = rows_data
-                .iter()
-                .map(|stock| UnicodeWidthStr::width(stock.stock_code.as_str()))
-                .max()
-                .unwrap_or(0);
+            let mut column_widths = header_widths;
+            for columns in &row_contents {
+                for (idx, content) in columns.iter().enumerate() {
+                    let width = UnicodeWidthStr::width(content.as_str());
+                    if width > column_widths[idx] {
+                        column_widths[idx] = width;
+                    }
+                }
+            }
 
-            let name_col_width = u16::try_from(name_header_width.max(name_data_width) + 2)
-                .unwrap_or(u16::MAX);
-            let code_col_width = u16::try_from(code_header_width.max(code_data_width) + 2)
-                .unwrap_or(u16::MAX);
-
-            let widths = vec![
-                Constraint::Length(name_col_width),
-                Constraint::Length(code_col_width),
-                Constraint::Length(3),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(14),
-            ];
+            let widths = column_widths
+                .into_iter()
+                .map(|w| u16::try_from(w + 2).unwrap_or(u16::MAX))
+                .map(Constraint::Length)
+                .collect::<Vec<_>>();
 
             let table = build_table(
                 base_rows,
@@ -351,8 +356,8 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
         let footer_text = if total == 0 {
             format!(
                 "No rows • Sort: {} {} • s next • d flip • Esc back",
-                sort_state.field.label(),
-                sort_state.direction_icon()
+                sort_state.direction_icon(),
+                sort_state.field.label()
             )
         } else if chart_state.show {
             format!(
@@ -362,8 +367,8 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 offset + 1,
                 visible_end,
                 total,
-                sort_state.field.label(),
-                sort_state.direction_icon()
+                sort_state.direction_icon(),
+                sort_state.field.label()
             )
         } else {
             format!(
@@ -373,8 +378,8 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                 offset + 1,
                 visible_end,
                 total,
-                sort_state.field.label(),
-                sort_state.direction_icon()
+                sort_state.direction_icon(),
+                sort_state.field.label()
             )
         };
         if footer_area.height > 0 {

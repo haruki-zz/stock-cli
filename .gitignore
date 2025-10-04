@@ -11,6 +11,8 @@
 !/build_macos_intel_release.sh
 !/docs/
 !/docs/**
+!/assets/
+!/assets/**
 
 # Keep Rust source files under src/
 !/src/

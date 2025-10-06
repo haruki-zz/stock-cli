@@ -1,13 +1,16 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-The CLI is a Rust crate with app entry in `src/main.rs` and domain modules under `src/app`, `src/config`, `src/fetch`, `src/records`, `src/ui`, and `src/utils`. UI widgets live in `src/ui`, while data ingestion and persistence sit in `src/fetch` and `src/records`. Assets land in `assets/snapshots/<market>/` and filter presets in `assets/filters/<market>/`. Docs live in `docs/` for architecture and styling notes. Keep new modules under `src/` and expose them via the nearest `mod.rs`.
+The CLI is a Rust crate with app entry in `src/main.rs` and domain modules under `src/app`, `src/config`, `src/fetch`, `src/records`, `src/ui`, and `src/utils`. UI widgets live in `src/ui`, while data ingestion and persistence sit in `src/fetch` and `src/records`. 
+Assets land in `assets/snapshots/<market>/` and filter presets in `assets/filters/<market>/`. 
+Docs live in `docs/` for architecture and styling notes. 
+Keep new modules under `src/` and expose them via the nearest `mod.rs`.
+
 ### Core functions
-- 1. Grabs live snapshots: loads tickers from stock_code.csv, pulls real-time quotes, save the newest dataset to CSV file, and lets users filter those rows interactively in the TUI.
+- 1. Grabs live snapshots: loads tickers from `assets/.markets/<region>.csv`, pulls real-time quotes, save the newest dataset to CSV file in `assets/snapshots/<market>/`, and lets users filter those rows interactively in the TUI.
 - 2. Builds price history views: spins a background worker that downloads up to 420 days of candles per selected stock and pipes the data into the Ratatui candlestick chart for multi-range analysis inside the results screen.
 
 ## Architecture
-All source code files shoule be placed under ./src folder according to their function.
 See `./docs/architecture.md`
 
 ## Build, Test, and Development Commands

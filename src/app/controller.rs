@@ -216,24 +216,10 @@ impl AppController {
         )
         .await
         {
-            Ok(data) => {
-                region_state.database_mut().update(data);
-                match region_state
-                    .records()
-                    .save_snapshot(region_state.database())
-                {
-                    Ok(saved_path) => {
-                        println!("Saved: {}", saved_path.display());
-                        let name = saved_path
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| saved_path.to_string_lossy().to_string());
-                        region_state.set_loaded_file(Some(name));
-                    }
-                    Err(err) => eprintln!("Failed to persist snapshot: {}", err),
-                }
-            }
+            Ok(data) => match region_state.apply_snapshot(data) {
+                Ok(saved_path) => println!("Saved: {}", saved_path.display()),
+                Err(err) => eprintln!("Failed to persist snapshot: {}", err),
+            },
             Err(AppError::Cancelled) => println!("{}", cancel_message),
             Err(err) => eprintln!("{}: {}", error_message, err),
         }

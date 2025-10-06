@@ -4,7 +4,7 @@ pub mod history;
 pub mod snapshots;
 
 pub use history::{spawn_history_fetch, Candle, HistoryReceiver};
-pub use snapshots::{fetch_japan_stock_codes, SnapshotFetcher, StockData};
+pub use snapshots::{SnapshotFetcher, StockData};
 
 /// Default concurrency guard applied when issuing snapshot requests.
 pub const SNAPSHOT_CONCURRENCY_LIMIT: usize = 5;

@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::config::{ProviderConfig, RegionConfig, Threshold};
+use crate::config::{RegionConfig, Threshold};
 use crate::error::{AppError, Context, Result};
-use crate::fetch::fetch_japan_stock_codes;
+use crate::fetch::StockData;
 use crate::records::{Records, StockDatabase};
 
 struct LoadedStockCodes {
@@ -72,10 +71,6 @@ impl RegionState {
         &self.database
     }
 
-    pub fn database_mut(&mut self) -> &mut StockDatabase {
-        &mut self.database
-    }
-
     pub fn replace_database(&mut self, database: StockDatabase) {
         self.database = database;
     }
@@ -92,6 +87,19 @@ impl RegionState {
         self.loaded_file = name;
     }
 
+    /// Replace the in-memory snapshot and persist it to disk.
+    pub fn apply_snapshot(&mut self, data: Vec<StockData>) -> Result<PathBuf> {
+        self.database.update(data);
+        let saved_path = self.records.save_snapshot(&self.database)?;
+        let name = saved_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| saved_path.to_string_lossy().to_string());
+        self.loaded_file = Some(name);
+        Ok(saved_path)
+    }
+
     pub fn directories(&self) -> (String, String) {
         let snapshots = self.records.snapshots_dir().to_string_lossy().to_string();
         let presets = self.records.presets_dir().to_string_lossy().to_string();
@@ -103,26 +111,11 @@ async fn prepare_stock_codes(region_config: &RegionConfig) -> Result<LoadedStock
     let path = Path::new(&region_config.stock_code_file);
 
     if !path.exists() {
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("Failed to create directory {}", parent.display()))?;
-            }
-        }
-
-        match &region_config.provider {
-            ProviderConfig::Stooq(cfg) => {
-                let entries = fetch_japan_stock_codes(cfg).await?;
-                write_stock_codes(path, &entries)?;
-            }
-            ProviderConfig::Tencent(_) => {
-                return Err(AppError::message(format!(
-                    "Stock codes file not found for region {}: {}",
-                    region_config.code,
-                    path.display()
-                )));
-            }
-        }
+        return Err(AppError::message(format!(
+            "Stock codes file not found for region {}: {}",
+            region_config.code,
+            path.display()
+        )));
     }
 
     load_stock_codes(path)
@@ -168,16 +161,4 @@ fn load_stock_codes(file_path: &Path) -> Result<LoadedStockCodes> {
     }
 
     Ok(LoadedStockCodes { codes, names })
-}
-
-fn write_stock_codes(path: &Path, entries: &[(String, String)]) -> Result<()> {
-    let mut writer = csv::Writer::from_path(path)
-        .with_context(|| format!("Failed to create stock codes file {}", path.display()))?;
-
-    writer.write_record(["code", "name"])?;
-    for (code, name) in entries {
-        writer.write_record([code, name])?;
-    }
-    writer.flush()?;
-    Ok(())
 }

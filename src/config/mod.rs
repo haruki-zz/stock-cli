@@ -16,11 +16,46 @@ pub struct Threshold {
     pub valid: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum HttpMethod {
+    Get,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CodeTransform {
+    pub lowercase: bool,
+    pub uppercase: bool,
+    pub prefix: Option<String>,
+    pub suffix: Option<String>,
+}
+
+impl CodeTransform {
+    pub fn apply(&self, code: &str) -> String {
+        let mut transformed = code.to_string();
+        if self.lowercase {
+            transformed = transformed.to_lowercase();
+        } else if self.uppercase {
+            transformed = transformed.to_uppercase();
+        }
+
+        if let Some(prefix) = &self.prefix {
+            transformed = format!("{}{}", prefix, transformed);
+        }
+
+        if let Some(suffix) = &self.suffix {
+            transformed = format!("{}{}", transformed, suffix);
+        }
+
+        transformed
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RequestConfig {
-    pub prefix: String,
-    pub suffix: String,
+    pub method: HttpMethod,
+    pub url_template: String,
     pub headers: HashMap<String, String>,
+    pub code_transform: CodeTransform,
 }
 
 #[derive(Debug, Clone)]
@@ -29,9 +64,34 @@ pub struct FirewallWarning {
 }
 
 #[derive(Debug, Clone)]
-pub struct TencentSnapshotConfig {
+pub struct SnapshotConfig {
     pub request: RequestConfig,
-    pub firewall_warning: FirewallWarning,
+    pub response: SnapshotResponse,
+    pub info_idxs: HashMap<String, InfoIndex>,
+    pub firewall_warning: Option<FirewallWarning>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SnapshotResponse {
+    Json(JsonResponseConfig),
+    Delimited(DelimitedResponseConfig),
+}
+
+#[derive(Debug, Clone)]
+pub struct JsonResponseConfig {
+    pub data_path: Vec<JsonPathSegment>,
+}
+
+#[derive(Debug, Clone)]
+pub enum JsonPathSegment {
+    Key(String),
+    StockCode,
+}
+
+#[derive(Debug, Clone)]
+pub struct DelimitedResponseConfig {
+    pub delimiter: char,
+    pub skip_lines: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -45,14 +105,8 @@ pub struct TencentHistoryConfig {
 
 #[derive(Debug, Clone)]
 pub struct TencentProviderConfig {
-    pub info_idxs: HashMap<String, InfoIndex>,
-    pub snapshot: TencentSnapshotConfig,
+    pub snapshot: SnapshotConfig,
     pub history: TencentHistoryConfig,
-}
-
-#[derive(Debug, Clone)]
-pub struct StooqSnapshotConfig {
-    pub quote_endpoint: String,
 }
 
 #[derive(Debug, Clone)]
@@ -63,15 +117,23 @@ pub struct StooqHistoryConfig {
 #[derive(Debug, Clone)]
 pub struct StooqProviderConfig {
     pub symbol_suffix: String,
-    pub snapshot: StooqSnapshotConfig,
+    pub snapshot: SnapshotConfig,
     pub history: StooqHistoryConfig,
-    pub listings_url: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum ProviderConfig {
     Tencent(TencentProviderConfig),
     Stooq(StooqProviderConfig),
+}
+
+impl ProviderConfig {
+    pub fn snapshot(&self) -> &SnapshotConfig {
+        match self {
+            ProviderConfig::Tencent(cfg) => &cfg.snapshot,
+            ProviderConfig::Stooq(cfg) => &cfg.snapshot,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

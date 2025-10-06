@@ -2,6 +2,17 @@
 
 ## 目录结构
 ```text
+assets/
+  .markets/
+    cn.csv
+    jp.csv
+  filters/
+    cn/
+    jp/
+  snapshots/
+    cn/
+    jp/
+
 src/
   main.rs
   app/
@@ -50,6 +61,22 @@ src/
 ```
 
 ## 模块说明
+
+### assets/.markets
+- `cn.csv`: 中国股票市场的股票代码。
+- `jp.csv`: 日本股票市场的股票代码
+
+### assets/filters/cn
+- 用于保存针对中国市场的filter文件
+
+### assets/filters/jp
+- 用于保存针对日本市场的filter文件
+
+### assets/snapshots/cn
+- 用于保存中国市场的snapshots（CSV文件）
+
+### assets/snapshots/jp
+- 用于保存日本市场的snapshots（CSV文件）
 
 ### src/main.rs
 - 程序入口，解析命令行参数、配置日志并调用 `app::bootstrap`。

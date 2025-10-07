@@ -387,6 +387,7 @@ fn amplitude(high: f64, low: f64, prev: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{InfoIndex, ProviderConfig, StooqHistoryConfig, StooqProviderConfig};
 
     #[test]
     fn parses_stooq_line() {
@@ -413,12 +414,12 @@ mod tests {
         };
 
         let region_config = RegionConfig {
-            code: "JP".into(),
+            code: "TEST".into(),
             name: "Test".into(),
             stock_code_file: String::new(),
             thresholds: HashMap::new(),
             provider: ProviderConfig::Stooq(StooqProviderConfig {
-                symbol_suffix: String::new(),
+                symbol_suffix: ".test".into(),
                 snapshot: snapshot_cfg.clone(),
                 history: StooqHistoryConfig {
                     endpoint: String::new(),
@@ -426,11 +427,14 @@ mod tests {
             }),
         };
 
-        let text = "Symbol,Date,Time,Open,High,Low,Close,PrevClose,Volume\n7203.JP,2024-01-02,15:00,2300,2350,2280,2340,2290,1800000\n";
-        let values = parse_delimited_response(text, match &snapshot_cfg.response {
-            SnapshotResponse::Delimited(cfg) => cfg,
-            _ => unreachable!(),
-        })
+        let text = "Symbol,Date,Time,Open,High,Low,Close,PrevClose,Volume\n7203.TEST,2024-01-02,15:00,2300,2350,2280,2340,2290,1800000\n";
+        let values = parse_delimited_response(
+            text,
+            match &snapshot_cfg.response {
+                SnapshotResponse::Delimited(cfg) => cfg,
+                _ => unreachable!(),
+            },
+        )
         .unwrap();
 
         let data = build_stock_data(

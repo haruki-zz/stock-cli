@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 mod cn;
-mod jp;
 
 #[derive(Debug, Clone)]
 pub struct InfoIndex {
@@ -74,6 +73,7 @@ pub struct SnapshotConfig {
 #[derive(Debug, Clone)]
 pub enum SnapshotResponse {
     Json(JsonResponseConfig),
+    #[allow(dead_code)]
     Delimited(DelimitedResponseConfig),
 }
 
@@ -124,6 +124,7 @@ pub struct StooqProviderConfig {
 #[derive(Debug, Clone)]
 pub enum ProviderConfig {
     Tencent(TencentProviderConfig),
+    #[allow(dead_code)]
     Stooq(StooqProviderConfig),
 }
 
@@ -152,10 +153,10 @@ pub struct Config {
 
 impl Config {
     pub fn builtin() -> Self {
-        let cn = cn::region();
-        let jp = jp::region();
-
-        let regions = HashMap::from([(cn.code.clone(), cn), (jp.code.clone(), jp)]);
+        let regions = vec![cn::region()]
+            .into_iter()
+            .map(|region| (region.code.clone(), region))
+            .collect();
 
         Self { regions }
     }

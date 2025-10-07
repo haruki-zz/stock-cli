@@ -5,13 +5,10 @@
 assets/
   .markets/
     cn.csv
-    jp.csv
   filters/
     cn/
-    jp/
   snapshots/
     cn/
-    jp/
 
 src/
   main.rs
@@ -23,7 +20,6 @@ src/
   config/
     mod.rs
     CN.rs
-    JP.rs
   fetch/
     mod.rs
     snapshots.rs
@@ -64,19 +60,15 @@ src/
 
 ### assets/.markets
 - `cn.csv`: 中国股票市场的股票代码。
-- `jp.csv`: 日本股票市场的股票代码
+- 新增市场时在该目录下按区域代码新增 CSV。
 
-### assets/filters/cn
-- 用于保存针对中国市场的filter文件
+### assets/filters/
+- `cn/`: 用于保存针对中国市场的 filter 文件
+- 新增市场时以区域代码创建对应的子目录保存 filter 文件
 
-### assets/filters/jp
-- 用于保存针对日本市场的filter文件
-
-### assets/snapshots/cn
-- 用于保存中国市场的snapshots（CSV文件）
-
-### assets/snapshots/jp
-- 用于保存日本市场的snapshots（CSV文件）
+### assets/snapshots/
+- `cn/`: 用于保存中国市场的 snapshots（CSV 文件）
+- 新增市场时以区域代码创建对应的子目录保存 snapshots（CSV 文件）
 
 ### src/main.rs
 - 程序入口，解析命令行参数、配置日志并调用 `app::bootstrap`。
@@ -90,7 +82,7 @@ src/
 ### src/config/
 - `mod.rs`：对外接口。
 - `CN.rs`: 内置中国市场的 HTTP 请求元数据与指标阈值默认值。
-- `JP.rs`: 内置日本市场的 HTTP 请求元数据与指标阈值默认值。
+- 新增市场时在该目录下新增对应模块并在 `mod.rs` 中注册。
 
 ### src/fetch/
 - `mod.rs`：抓取逻辑共用的 trait、错误别名与辅助函数。

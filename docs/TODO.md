@@ -8,5 +8,5 @@
 - [x] `src/ui/flows`: rebuild each TUI screen (main menu, fetch progress, results, presets, thresholds) to consume the refactored state/controller interfaces while respecting routing rules.
 - [x] `src/ui`: reorganize UI scaffolding to expose the routes and styling helpers specified in `docs/styles.md`, introducing `navigation`, `styles`, and a clean public surface in `mod.rs`.
 - [x] `src/app`: split responsibilities into `bootstrap`, `controller`, and `state` modules, ensuring each coordinates configuration, data fetchers, and UI transitions per the architecture document.
-- [x] `src/config`: centralize region metadata under `mod.rs`, extracting China/Japan specifics into dedicated modules and normalizing threshold serialization.
+- [x] `src/config`: centralize region metadata under `mod.rs`, extracting China-specific defaults into a dedicated module while keeping the layout extensible for future markets.
 - [x] `src/main.rs`: align the entrypoint with `app::bootstrap` by delegating startup, wiring logging, and trimming any direct business logic in favor of the controller-oriented flow described in `docs/architecture.md`.

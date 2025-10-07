@@ -14,7 +14,7 @@ Steps
   - `cargo build --release`
 - Prepare required files next to the binary (or run from project root)
   - `stock_code.csv` for the China A-share market (required, one code per line)
-  - Japanese listings are downloaded automatically on first launch and saved to `stock_codes/japan.csv`
+  - Additional market CSVs can be added under `assets/.markets/` when new regions are configured
 - Run the program
   - `./target/release/stock-cli`
 

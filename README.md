@@ -1,77 +1,40 @@
 # Stock CLI
 
-A fast, terminal-based tool for fetching, viewing, and filtering stock data. It fetches live data, saves timestamped CSVs, and offers an intuitive menu-driven TUI.
+终端内的中国股票市场快照与历史行情工具。程序抓取腾讯行情接口、落盘 CSV，并通过 Ratatui 构建的多界面 TUI 提供筛选、排序与走势图。未来仍可扩展其他区域，当前默认聚焦中国 A 股。
 
-## Installation
+![应用主菜单](./img/main_menu.png)
 
-Prerequisites
-- Rust toolchain (stable) with `cargo`
+## 核心能力
+- 获取最新行情：读取 `stock_code.csv` 中的股票代码，批量请求实时数据并展示关键信息（现价、涨跌幅、换手率等）。
+- 结果筛选：设置阈值过滤器，快速定位满足成交额、涨幅等条件的标的，可保存/加载本地预设。
+- 历史走势：为当前选中股票加载最长 420 天 K 线，并在结果页内联动展示多周期蜡烛图。
+- CSV 管理：每次抓取自动输出带时间戳的快照至 `assets/snapshots/cn/`，支持在程序内快速回放旧数据。
 
-Steps
-- Clone the repository and enter the folder
-  - `git clone <repo-url> && cd stock-cli`
-- Build a release binary
-  - `cargo build --release`
-- Prepare required files next to the binary (or run from project root)
-  - `stock_code.csv` for the China A-share market (required, one code per line)
-  - Additional market CSVs can be added under `assets/.markets/` when new regions are configured
-- Run the program
-  - `./target/release/stock-cli`
+## 快速上手
+- 安装依赖：准备稳定版 Rust 工具链（含 `cargo`）。
+- 获取代码：`git clone <repo-url> && cd stock-cli`
+- 构建应用：`cargo build --release`
+- 准备数据：在可执行文件同级目录放置 `stock_code.csv`（一行一个代码，仅限中国市场）；需要拓展其他市场时，可在 `assets/.markets/` 下新增区域 CSV 并在配置中注册。
+- 启动程序：`./target/release/stock-cli`（开发过程中可使用 `cargo run`）。
 
-Notes
-- `assets/snapshots/<market>/` is created on first fetch and stores timestamped CSVs per market.
-- The app errors if the configured stock code file is missing (e.g., `stock_code.csv` for CN) or empty.
+## 使用指南
+- 主菜单
+  - `Show Filtered`：查看符合当前阈值的股票列表，支持 `s`（切换排序列）、`d`（正逆序）、Enter（展开 K 线图）、`←/→`（切换时间范围）。
+  - `Filters`：调整、保存或加载阈值。编辑器支持 Tab/方向键在上下限间切换，输入数值后 Enter 保存。
+  - `Refresh Data`：立即抓取最新行情并落盘。
+  - `Load CSV`：从本地快照目录选择历史数据集回放。
+  - `Quit`：退出程序。（当存在多个区域时，会自动出现 `Switch Market` 选项。）
+- 导航习惯
+  - 方向键或 `j/k`：移动选项
+  - `Enter`：确认，`Esc`：返回上一层，`Ctrl+C`：强制退出
+- 建议流程
+  1. 在主菜单选择 `Refresh Data` 获取最新行情；
+  2. 进入 `Filters` 调整筛选条件；
+  3. 在 `Show Filtered` 中浏览结果、查看联动图表；
+  4. 根据需要保存阈值或加载旧 CSV。
 
-## Usage
-
-Start the app
-- `stock-cli` (or `cargo run` during development)
-- Pick the desired market when prompted; data, presets, and raw CSVs are stored per market (`assets/snapshots/<market>/`, `assets/filters/<market>/`)
-
-Global navigation
-- ↑/↓ or j/k: move selection (vertical)
-- ←/→ or h/l: move selection (horizontal, where available)
-- Enter: confirm / drill down • Esc: back • Ctrl+C: exit
-
-Menu actions
-- Show Filtered — Browse stocks matching current filters
-  - ↓/j and ↑/k move the highlight; PageDown/PageUp jump by a page; Home/End jump to first/last row
-  - Press `s` to cycle the sort column and `d` to flip ascending/descending; the active header shows an arrow
-  - Press Enter to toggle the inline price chart; ←/→ or Enter cycle across 1Y/6M/3M/1M/1W ranges; X closes the chart
-  - When the chart is open it fills the lower half of the screen while the table continues to show the full metric columns; Esc returns to the menu
-  - The chart header shows timeframe shortcuts; the detail panel lists price/turnover metrics while the chart is visible
-- Filters — Manage thresholds
-  - Set Filters — Adjust ranges using the editor
-  - Save Filters — Store the current thresholds as a named preset (`assets/filters/`)
-  - Load Filters — Pick a saved preset to apply immediately
-- Set Filters — Adjust threshold ranges used for filtering
-  - Third-level editor (inline modal):
-    - Tab/↑/↓/j/k: switch between Lower and Upper
-    - Type numbers (digits/./-), Backspace to edit, Enter to save, Esc to cancel
-    - Values display with two decimals
-- Refresh Data — Fetch latest data and save to `assets/snapshots/`
-  - Progress screen shows “Please wait…” and a textual percentage; Enter to continue when done
-- Load CSV — Pick a CSV from `assets/snapshots/` using the same keys (↑/↓/j/k, Enter/Esc)
-- Switch Market — Change the active region without restarting (only shown when multiple regions are available)
-- Quit — Exit
-
-Tips
-- On startup, if a recent CSV exists and you skip loading it, the app automatically fetches fresh data.
-- After each action, press Enter to return to the main menu.
-
-## Features
-
-- Async fetching with progress and error handling (Tokio + anyhow)
-- Ratatui-powered TUI with clear, consistent key bindings and selectable tables
-- Inline historical charts (1Y/6M/3M/1M/1W) alongside filtered results
-- CSV persistence with timestamped filenames under `assets/snapshots/`
-- Powerful filtering by configurable thresholds
-- Built-in CSV picker to load past datasets
-- Live region switching without restarting when multiple markets are configured
-- Unicode-friendly rendering for names and labels
-
-Highlighted structure
-- `src/application/` — App wiring and lifecycle
-- `src/services/` — Async HTTP clients and historical data fetchers
-- `src/storage/` — In-memory store, filtering logic, and CSV I/O
-- `src/ui/` — Ratatui components (main menu, CSV picker, thresholds editor, progress, results, charts)
+## 数据与扩展
+- 行情代码：`stock_code.csv`（必需），自定义区域时请在 `assets/.markets/` 下新增对应文件。
+- 快照输出：`assets/snapshots/<region>/`.
+- 阈值预设：`assets/filters/<region>/`.
+- 新市场扩展：在 `src/config/` 下新增区域模块并在 `Config::builtin` 中注册即可复用现有流程。

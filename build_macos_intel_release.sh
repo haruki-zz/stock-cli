@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Build a macOS Intel (x86_64) release binary and package it
-# with stock_code.csv and Cargo.toml into a tar.gz.
+# together with stock_code.csv, Cargo.toml, README, docs, and assets
+# into a tar.gz bundle ready for distribution.
 # Usage: ./build_macos_intel_release.sh [TAG]
 # Example: ./build_macos_intel_release.sh v1.2.3
 
@@ -22,9 +23,16 @@ echo "==> Building release for ${TARGET_TRIPLE}"
 cargo build --release --target ${TARGET_TRIPLE}
 
 echo "==> Verifying required files"
-for f in stock_code.csv Cargo.toml; do
+for f in stock_code.csv Cargo.toml README.md; do
   if [[ ! -f "$f" ]]; then
     echo "Missing required file: $f" >&2
+    exit 1
+  fi
+done
+
+for d in docs assets; do
+  if [[ ! -d "$d" ]]; then
+    echo "Missing required directory: $d" >&2
     exit 1
   fi
 done
@@ -32,7 +40,13 @@ done
 echo "==> Packaging ${PKG_NAME}"
 mkdir -p "$DIST_DIR"
 cp "target/${TARGET_TRIPLE}/release/${APP_NAME}" "${APP_NAME}"
-tar -czf "${DIST_DIR}/${PKG_NAME}.tar.gz" ${APP_NAME} stock_code.csv Cargo.toml README.md
+tar -czf "${DIST_DIR}/${PKG_NAME}.tar.gz" \
+  "${APP_NAME}" \
+  stock_code.csv \
+  Cargo.toml \
+  README.md \
+  docs \
+  assets
 shasum -a 256 "${DIST_DIR}/${PKG_NAME}.tar.gz" > "${DIST_DIR}/${PKG_NAME}.tar.gz.sha256"
 rm -f "${APP_NAME}"
 

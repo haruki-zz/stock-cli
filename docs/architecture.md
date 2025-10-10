@@ -5,10 +5,13 @@
 assets/
   .markets/
     cn.csv
+    jp.csv
   filters/
     cn/
+    jp/
   snapshots/
     cn/
+    jp/
 
 src/
   main.rs
@@ -19,7 +22,8 @@ src/
     state.rs
   config/
     mod.rs
-    CN.rs
+    cn.rs
+    jp.rs
   fetch/
     mod.rs
     snapshots.rs
@@ -60,14 +64,17 @@ src/
 
 ### assets/.markets
 - `cn.csv`: 中国股票市场的股票代码。
+- `jp.csv`: 东京证券交易所 Prime 市场股票代码（J-Quants 提供的数据源）。
 - 新增市场时在该目录下按区域代码新增 CSV。
 
 ### assets/filters/
 - `cn/`: 用于保存针对中国市场的 filter 文件
+- `jp/`: 用于保存针对日本市场的 filter 文件
 - 新增市场时以区域代码创建对应的子目录保存 filter 文件
 
 ### assets/snapshots/
 - `cn/`: 用于保存中国市场的 snapshots（CSV 文件）
+- `jp/`: 用于保存日本市场的 snapshots（CSV 文件）
 - 新增市场时以区域代码创建对应的子目录保存 snapshots（CSV 文件）
 
 ### src/main.rs
@@ -81,7 +88,8 @@ src/
 
 ### src/config/
 - `mod.rs`：对外接口。
-- `CN.rs`: 内置中国市场的 HTTP 请求元数据与指标阈值默认值。
+- `cn.rs`: 内置中国市场的 HTTP 请求元数据与指标阈值默认值。
+- `jp.rs`: 内置日本市场（J-Quants API）的认证信息、交易日历与默认阈值。
 - 新增市场时在该目录下新增对应模块并在 `mod.rs` 中注册。
 
 ### src/fetch/

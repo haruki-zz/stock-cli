@@ -194,6 +194,11 @@ struct PreparedRequest {
     headers: HeaderMap,
 }
 
+enum RawSnapshotValues {
+    Indexed(Vec<String>),
+    Object(HashMap<String, Value>),
+}
+
 fn prepare_request(
     stock_code: &str,
     request: &crate::config::RequestConfig,
@@ -213,11 +218,58 @@ fn build_headers(headers: &HashMap<String, String>) -> FetchResult<HeaderMap> {
     for (key, value) in headers {
         let name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
             .with_context(|| format!("Invalid header name: {}", key))?;
-        let header_value = reqwest::header::HeaderValue::from_str(value)
+        let expanded = expand_env_vars(value)?;
+        let header_value = reqwest::header::HeaderValue::from_str(&expanded)
             .with_context(|| format!("Invalid header value for {}", key))?;
         map.insert(name, header_value);
     }
     Ok(map)
+}
+
+pub(crate) fn expand_env_vars(value: &str) -> FetchResult<String> {
+    let mut result = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '$' && matches!(chars.peek(), Some('{')) {
+            chars.next();
+            let mut name = String::new();
+            let mut closed = false;
+            while let Some(&next) = chars.peek() {
+                if next == '}' {
+                    chars.next();
+                    closed = true;
+                    break;
+                }
+                name.push(next);
+                chars.next();
+            }
+
+            if name.is_empty() {
+                return Err(AppError::message(
+                    "Encountered empty environment placeholder in header",
+                ));
+            }
+
+            if !closed {
+                return Err(AppError::message(
+                    "Unterminated environment placeholder in header",
+                ));
+            }
+
+            let value = std::env::var(&name).with_context(|| {
+                format!(
+                    "Environment variable {} required by request header is not set",
+                    name
+                )
+            })?;
+            result.push_str(&value);
+        } else {
+            result.push(ch);
+        }
+    }
+
+    Ok(result)
 }
 
 fn validate_firewall(response_text: &str, snapshot_cfg: &SnapshotConfig) -> FetchResult<()> {
@@ -233,10 +285,12 @@ fn parse_response(
     stock_code: &str,
     text: &str,
     response: &SnapshotResponse,
-) -> FetchResult<Vec<String>> {
+) -> FetchResult<RawSnapshotValues> {
     match response {
         SnapshotResponse::Json(cfg) => parse_json_response(stock_code, text, cfg),
-        SnapshotResponse::Delimited(cfg) => parse_delimited_response(text, cfg),
+        SnapshotResponse::Delimited(cfg) => {
+            parse_delimited_response(text, cfg).map(RawSnapshotValues::Indexed)
+        }
     }
 }
 
@@ -244,7 +298,7 @@ fn parse_json_response(
     stock_code: &str,
     text: &str,
     cfg: &crate::config::JsonResponseConfig,
-) -> FetchResult<Vec<String>> {
+) -> FetchResult<RawSnapshotValues> {
     let json: Value = serde_json::from_str(text).context("Failed to parse JSON response")?;
     let mut cursor = &json;
 
@@ -259,23 +313,37 @@ fn parse_json_response(
                     stock_code
                 ))
             })?,
+            JsonPathSegment::Index(idx) => cursor.get(*idx).ok_or_else(|| {
+                AppError::message(format!("Missing index {} in snapshot payload", idx))
+            })?,
         };
     }
 
-    let array = cursor
-        .as_array()
-        .context("Snapshot payload is not an array of values")?;
+    if let Some(array) = cursor.as_array() {
+        let values = array
+            .iter()
+            .map(|value| match value {
+                Value::String(s) => s.clone(),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => String::new(),
+                other => other.to_string(),
+            })
+            .collect();
+        return Ok(RawSnapshotValues::Indexed(values));
+    }
 
-    Ok(array
-        .iter()
-        .map(|value| match value {
-            Value::String(s) => s.clone(),
-            Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Null => String::new(),
-            other => other.to_string(),
-        })
-        .collect())
+    if let Some(object) = cursor.as_object() {
+        let map = object
+            .iter()
+            .map(|(key, value)| (normalize_key(key), value.clone()))
+            .collect();
+        return Ok(RawSnapshotValues::Object(map));
+    }
+
+    Err(AppError::message(
+        "Snapshot payload was neither an array nor an object",
+    ))
 }
 
 fn parse_delimited_response(text: &str, cfg: &DelimitedResponseConfig) -> FetchResult<Vec<String>> {
@@ -292,6 +360,27 @@ fn parse_delimited_response(text: &str, cfg: &DelimitedResponseConfig) -> FetchR
 }
 
 fn build_stock_data(
+    stock_code: &str,
+    region_config: &RegionConfig,
+    snapshot_cfg: &SnapshotConfig,
+    raw_values: &RawSnapshotValues,
+    static_names: &HashMap<String, String>,
+) -> FetchResult<StockData> {
+    match raw_values {
+        RawSnapshotValues::Indexed(values) => build_stock_data_from_indexed(
+            stock_code,
+            region_config,
+            snapshot_cfg,
+            values,
+            static_names,
+        ),
+        RawSnapshotValues::Object(values) => {
+            build_stock_data_from_object(stock_code, region_config, values, static_names)
+        }
+    }
+}
+
+fn build_stock_data_from_indexed(
     stock_code: &str,
     region_config: &RegionConfig,
     snapshot_cfg: &SnapshotConfig,
@@ -368,6 +457,118 @@ fn build_stock_data(
     })
 }
 
+fn build_stock_data_from_object(
+    stock_code: &str,
+    region_config: &RegionConfig,
+    values: &HashMap<String, Value>,
+    static_names: &HashMap<String, String>,
+) -> FetchResult<StockData> {
+    let lookup_value = |aliases: &[&str]| -> Option<&Value> {
+        aliases
+            .iter()
+            .find_map(|alias| values.get(&normalize_key(alias)))
+    };
+
+    let lookup_string = |aliases: &[&str]| -> Option<String> {
+        lookup_value(aliases).and_then(json_value_to_string)
+    };
+
+    let parse_number = |aliases: &[&str]| -> FetchResult<Option<f64>> {
+        match lookup_value(aliases) {
+            Some(value) => json_value_to_f64(value),
+            None => Ok(None),
+        }
+    };
+
+    let curr = parse_number(&["currentprice", "lastprice", "regularmarketprice"])?
+        .ok_or_else(|| AppError::message("Missing current price in snapshot payload"))?;
+    let prev_closed =
+        parse_number(&["previousclose", "prevclose", "previousdayclose"])?.unwrap_or(curr);
+    let open = parse_number(&["openingprice", "openprice", "open"])?.unwrap_or(curr);
+    let highest = parse_number(&["highprice", "high"])?.unwrap_or(curr);
+    let lowest = parse_number(&["lowprice", "low"])?.unwrap_or(curr);
+
+    let stock_name = lookup_string(&["symbolname", "issuename", "securityname", "name"])
+        .filter(|name| !name.is_empty())
+        .or_else(|| static_names.get(stock_code).cloned())
+        .unwrap_or_else(|| stock_code.to_string());
+
+    let increase = parse_number(&["changerate", "changepercent", "changepct"])?
+        .unwrap_or_else(|| percentage_change(curr, prev_closed));
+    let amp = parse_number(&["amplitude", "priceamplitude", "highlowspreadpct"])?
+        .unwrap_or_else(|| amplitude(highest, lowest, prev_closed));
+
+    let volume = parse_number(&["tradingvolume", "volume"])?;
+
+    let turnover = parse_number(&["tradingvalue", "turnover", "money"])?;
+
+    let turn_over = turnover
+        .map(|value| value / 1_000_000.0)
+        .or_else(|| volume.map(|v| v / 1_000_000.0))
+        .unwrap_or(0.0);
+
+    let tm = turnover
+        .map(|value| value / 1_000_000.0)
+        .or_else(|| volume.map(|v| (v * curr) / 1_000_000.0))
+        .unwrap_or(0.0);
+
+    Ok(StockData {
+        market: region_config.code.clone(),
+        stock_name,
+        stock_code: stock_code.to_string(),
+        curr,
+        prev_closed,
+        open,
+        increase,
+        highest,
+        lowest,
+        turn_over,
+        amp,
+        tm,
+    })
+}
+
+fn normalize_key(key: &str) -> String {
+    key.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+fn json_value_to_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(s) => Some(s.trim().to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Null => None,
+        _ => None,
+    }
+}
+
+fn json_value_to_f64(value: &Value) -> FetchResult<Option<f64>> {
+    match value {
+        Value::Number(num) => num
+            .as_f64()
+            .ok_or_else(|| AppError::message("Numeric value out of range"))
+            .map(Some),
+        Value::String(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+            trimmed
+                .parse::<f64>()
+                .with_context(|| format!("Failed to parse '{}' as float", trimmed))
+                .map(Some)
+                .map_err(AppError::from)
+        }
+        Value::Null => Ok(None),
+        _ => Err(AppError::message(
+            "Unexpected non-numeric value in snapshot payload",
+        )),
+    }
+}
+
 fn percentage_change(curr: f64, prev: f64) -> f64 {
     if prev.abs() > f64::EPSILON {
         ((curr - prev) / prev) * 100.0
@@ -387,7 +588,10 @@ fn amplitude(high: f64, low: f64, prev: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{InfoIndex, ProviderConfig, StooqHistoryConfig, StooqProviderConfig};
+    use crate::config::{
+        HistoryProviderKind, InfoIndex, JsonResponseConfig, ProviderConfig, StooqHistoryConfig,
+        StooqProviderConfig, TencentHistoryConfig, TencentProviderConfig,
+    };
 
     #[test]
     fn parses_stooq_line() {
@@ -437,11 +641,13 @@ mod tests {
         )
         .unwrap();
 
+        let raw_values = RawSnapshotValues::Indexed(values);
+
         let data = build_stock_data(
             "7203",
             &region_config,
             &snapshot_cfg,
-            &values,
+            &raw_values,
             &HashMap::new(),
         )
         .unwrap();
@@ -450,5 +656,82 @@ mod tests {
         assert_eq!(data.prev_closed, 2290.0);
         assert!((data.increase - ((2340.0 - 2290.0) / 2290.0 * 100.0)).abs() < 1e-6);
         assert_eq!(data.turn_over, 1.8);
+    }
+
+    #[test]
+    fn parses_jquants_snapshot_object() {
+        let snapshot_cfg = SnapshotConfig {
+            request: crate::config::RequestConfig {
+                method: crate::config::HttpMethod::Get,
+                url_template: String::new(),
+                headers: HashMap::new(),
+                code_transform: crate::config::CodeTransform::default(),
+            },
+            response: SnapshotResponse::Json(JsonResponseConfig {
+                data_path: vec![
+                    JsonPathSegment::Key("quotes".into()),
+                    JsonPathSegment::Index(0),
+                ],
+            }),
+            info_idxs: HashMap::new(),
+            firewall_warning: None,
+        };
+
+        let region_config = RegionConfig {
+            code: "JP".into(),
+            name: "Japan".into(),
+            stock_code_file: String::new(),
+            thresholds: HashMap::new(),
+            provider: ProviderConfig::Tencent(TencentProviderConfig {
+                snapshot: snapshot_cfg.clone(),
+                history: TencentHistoryConfig {
+                    endpoint: String::new(),
+                    referer: String::new(),
+                    user_agent: String::new(),
+                    accept_language: String::new(),
+                    record_days: 420,
+                    auth_header: None,
+                    kind: HistoryProviderKind::Tencent,
+                },
+            }),
+        };
+
+        let response = r#"{
+            "quotes": [
+                {
+                    "Code": "7203",
+                    "SymbolName": "トヨタ自動車",
+                    "CurrentPrice": 2340.0,
+                    "PreviousClose": 2290.0,
+                    "OpeningPrice": 2300.0,
+                    "HighPrice": 2350.0,
+                    "LowPrice": 2280.0,
+                    "ChangeRate": 2.1838,
+                    "TradingVolume": 1800000,
+                    "TradingValue": 4200000000
+                }
+            ]
+        }"#;
+
+        let raw_values = parse_response("7203", response, &snapshot_cfg.response).unwrap();
+
+        let data = build_stock_data(
+            "7203",
+            &region_config,
+            &snapshot_cfg,
+            &raw_values,
+            &HashMap::new(),
+        )
+        .unwrap();
+
+        assert_eq!(data.stock_name, "トヨタ自動車");
+        assert!((data.curr - 2340.0).abs() < 1e-6);
+        assert!((data.prev_closed - 2290.0).abs() < 1e-6);
+        assert!((data.open - 2300.0).abs() < 1e-6);
+        assert!((data.highest - 2350.0).abs() < 1e-6);
+        assert!((data.lowest - 2280.0).abs() < 1e-6);
+        assert!((data.increase - 2.1838).abs() < 1e-6);
+        assert!(data.turn_over > 0.0);
+        assert!(data.tm > 0.0);
     }
 }

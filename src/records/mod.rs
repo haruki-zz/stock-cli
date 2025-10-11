@@ -150,16 +150,6 @@ impl Records {
         Ok(path)
     }
 
-    pub fn save_threshold_preset(
-        &self,
-        name: &str,
-        thresholds: &HashMap<String, Threshold>,
-    ) -> Result<PathBuf> {
-        let mut normalized = thresholds.clone();
-        ensure_metric_thresholds(&mut normalized);
-        presets::save_thresholds(self.presets_dir(), name, &normalized)
-    }
-
     pub fn load_threshold_preset<P: AsRef<Path>>(
         &self,
         path: P,

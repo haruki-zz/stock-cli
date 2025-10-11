@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 mod cn;
+mod jp;
 
 #[derive(Debug, Clone)]
 pub struct InfoIndex {
@@ -86,6 +87,7 @@ pub struct JsonResponseConfig {
 pub enum JsonPathSegment {
     Key(String),
     StockCode,
+    Index(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -101,12 +103,20 @@ pub struct TencentHistoryConfig {
     pub user_agent: String,
     pub accept_language: String,
     pub record_days: usize,
+    pub auth_header: Option<String>,
+    pub kind: HistoryProviderKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct TencentProviderConfig {
     pub snapshot: SnapshotConfig,
     pub history: TencentHistoryConfig,
+}
+
+#[derive(Debug, Clone)]
+pub enum HistoryProviderKind {
+    Tencent,
+    Jquants,
 }
 
 #[derive(Debug, Clone)]
@@ -153,7 +163,7 @@ pub struct Config {
 
 impl Config {
     pub fn builtin() -> Self {
-        let regions = vec![cn::region()]
+        let regions = vec![cn::region(), jp::region()]
             .into_iter()
             .map(|region| (region.code.clone(), region))
             .collect();

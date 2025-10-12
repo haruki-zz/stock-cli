@@ -93,13 +93,29 @@ pub fn run_thresholds_editor(
             let size = f.size();
             let chunks = split_vertical(
                 size,
-                &[Constraint::Length(2), Constraint::Min(1), Constraint::Length(1)],
+                &[
+                    Constraint::Length(2),
+                    Constraint::Length(2),
+                    Constraint::Min(1),
+                    Constraint::Length(1),
+                ],
             );
 
             let title = Paragraph::new(header_text(
                 "Edit thresholds — \u{2191}/\u{2193}/j/k move • Space toggles selected metric • Enter edit • Esc back",
             ));
             f.render_widget(title, chunks[0]);
+
+            let save_hint: Line = vec![
+                "Press ".into(),
+                "S".bold().fg(ACCENT),
+                " or ".into(),
+                "Ctrl+S".bold().fg(ACCENT),
+                " to save current filters as a preset".into(),
+            ]
+            .into();
+            let hint = Paragraph::new(save_hint).alignment(Alignment::Center);
+            f.render_widget(hint, chunks[1]);
 
             let total_items = keys.len() + 1;
             let mut list_items = Vec::with_capacity(total_items);
@@ -140,7 +156,7 @@ pub fn run_thresholds_editor(
                     .borders(Borders::ALL)
                     .title(UiRoute::Thresholds.title()),
             );
-            f.render_widget(list, chunks[1]);
+            f.render_widget(list, chunks[2]);
 
             let footer = match &save_status {
                 Some(SaveStatus::Info(message)) => Paragraph::new(secondary_line(message)),
@@ -156,7 +172,7 @@ pub fn run_thresholds_editor(
                     Paragraph::new(secondary_line(base))
                 }
             };
-            f.render_widget(footer, chunks[2]);
+            f.render_widget(footer, chunks[3]);
 
             if let Mode::Edit {
                 name,

@@ -1,5 +1,6 @@
 use crate::error::Result;
 
+pub mod auth;
 pub mod history;
 pub mod snapshots;
 

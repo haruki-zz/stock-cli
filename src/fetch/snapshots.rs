@@ -11,7 +11,7 @@ use reqwest::{header::HeaderMap, Client, StatusCode};
 use serde_json::Value;
 use tokio::time::{sleep, Duration};
 
-use crate::fetch::{ensure_concurrency_limit, FetchResult, SNAPSHOT_CONCURRENCY_LIMIT};
+use crate::fetch::{auth, ensure_concurrency_limit, FetchResult, SNAPSHOT_CONCURRENCY_LIMIT};
 
 #[derive(Debug, Clone)]
 /// Canonical representation of a single stock row returned by the remote endpoint.
@@ -257,12 +257,7 @@ pub(crate) fn expand_env_vars(value: &str) -> FetchResult<String> {
                 ));
             }
 
-            let value = std::env::var(&name).with_context(|| {
-                format!(
-                    "Environment variable {} required by request header is not set",
-                    name
-                )
-            })?;
+            let value = auth::resolve_placeholder(&name)?;
             result.push_str(&value);
         } else {
             result.push(ch);

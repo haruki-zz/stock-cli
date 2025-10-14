@@ -88,7 +88,7 @@ src/
 ### src/config/
 - `mod.rs`：对外接口。
 - `cn.rs`: 内置中国市场的 HTTP 请求元数据与指标阈值默认值。
-- `jp.rs`: 内置日本市场（J-Quants API）的认证信息、交易日历与默认阈值，并为授权头提供环境变量占位符。
+- `jp.rs`: 内置日本市场（J-Quants API）的认证信息、交易日历与默认阈值，并为授权头提供环境变量占位符（`JQUANTS_EMAIL`、`JQUANTS_PASSWORD` 自动换取 token）。
 - 新增市场时在该目录下新增对应模块并在 `mod.rs` 中注册，同时根据需要扩展 `HistoryProviderKind`。
 
 ### src/fetch/

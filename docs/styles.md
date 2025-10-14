@@ -1,18 +1,29 @@
-# Headers, primary, and secondary text
+# Text hierarchy
 
-- **Headers:** Use `bold`. For markdown with various header levels, leave in the `#` signs.
-- **Primary text:** Default.
-- **Secondary text:** Use `dim`.
+- **Headers:** Use `header_text` (bold + accent). In markdown docs, keep heading markers as usual.
+- **Primary body text:** Default foreground.
+- **Secondary text / hints:** Use `secondary_line` / `secondary_span` helpers (`dim`).
 
-# Foreground colors
+# Accent and colors
 
-- **Default:** Most of the time, just use the default foreground color. `reset` can help get it back.
-- **User input tips, selection, and status indicators:** Use ANSI `DarkOrange`.
-- **Success and additions:** Use ANSI `green`.
-- **Errors, failures and deletions:** Use ANSI `red`.
+- **Accent:** Use `ACCENT` (`Color::Indexed(208)`) for selections, key hints, and primary actions. Access via helpers (`selection_style`, `.fg(ACCENT)`), do not hardcode the index in call sites.
+- **Success / OK:** `Color::Green`.
+- **Errors / warnings:** `Color::Red`.
+- **Charts / derived colors:** Prefer helper functions inside `styles.rs` or chart modules; avoid inventing new palettes without discussion.
+
+# Stylize conventions
+
+- Prefer the `Stylize` trait (`"text".dim().bold()`) over manual `Style` construction when possible.
+- Convert strings with `.into()` for `Span`/`Line` when the target type is obvious; fall back to `Span::from` / `Line::from` when inference fails.
+- Keep chained styling calls on a single line after `rustfmt`. If that causes wrapping, split the expression across multiple lines with a single indent level.
+
+# Layout helpers
+
+- Use `split_vertical` / `centered_rect` from `components::utils` for consistent spacing between sections.
+- Reuse `secondary_line` for footers rather than crafting new dimmed paragraphs in-place.
 
 # Avoid
 
-- Avoid custom colors because there's no guarantee that they'll contrast well or look good in various terminal color themes. (`shimmer.rs` is an exception that works well because we take the default colors and just adjust their levels.)
-- Avoid ANSI `black` & `white` as foreground colors because the default terminal theme color will do a better job. (Use `reset` if you need to in order to get those.) The exception is if you need contrast rendering over a manually colored background.
-- Avoid ANSI `blue` and `yellow` because for now the style guide doesn't use them. Prefer a foreground color mentioned above.
+- Avoid ANSI `white`/`black` overrides – rely on theme defaults unless the background color is custom.
+- Do not introduce new indexed colors; update `ACCENT` if a palette change is required.
+- Skip bespoke padding logic if an existing helper (`split_vertical`, table builders) already handles the layout.

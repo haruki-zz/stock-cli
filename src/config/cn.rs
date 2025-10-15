@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use super::{
-    CodeTransform, FirewallWarning, HistoryProviderKind, HttpMethod, InfoIndex, JsonPathSegment,
-    JsonResponseConfig, ProviderConfig, RegionConfig, RequestConfig, SnapshotConfig,
-    SnapshotResponse, TencentHistoryConfig, TencentProviderConfig, Threshold,
+    CodeTransform, FirewallWarning, HttpMethod, InfoIndex, JsonPathSegment, JsonResponseConfig,
+    ProviderConfig, RegionConfig, RequestConfig, SnapshotConfig, SnapshotResponse,
+    TencentHistoryConfig, TencentProviderConfig, Threshold,
 };
 
 pub fn region() -> RegionConfig {
@@ -101,8 +101,6 @@ pub fn region() -> RegionConfig {
             user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36".to_string(),
             accept_language: "en-US,en;q=0.9".to_string(),
             record_days: 420,
-            auth_header: None,
-            kind: HistoryProviderKind::Tencent,
         },
     });
 

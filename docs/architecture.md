@@ -5,13 +5,10 @@
 assets/
   .markets/
     cn.csv
-    jp.csv
   filters/
     cn/
-    jp/
   snapshots/
     cn/
-    jp/
 
 src/
   main.rs
@@ -23,7 +20,6 @@ src/
   config/
     mod.rs
     cn.rs
-    jp.rs
   fetch/
     mod.rs
     snapshots.rs
@@ -62,19 +58,13 @@ src/
 ## 模块说明
 
 ### assets/.markets
-- `cn.csv`: 中国股票市场的股票代码。
-- `jp.csv`: 东京证券交易所 Prime 市场股票代码（J-Quants 提供的数据源）。
-- 新增市场时在该目录下按区域代码新增 CSV。
+- `cn.csv`: 中国股票市场的股票代码。若新增市场，可在该目录下按区域代码扩展 CSV 并同步代码模块。
 
 ### assets/filters/
-- `cn/`: 用于保存针对中国市场的 filter 文件
-- `jp/`: 用于保存针对日本市场的 filter 文件
-- 新增市场时以区域代码创建对应的子目录保存 filter 文件
+- `cn/`: 用于保存针对中国市场的 filter 文件。
 
 ### assets/snapshots/
-- `cn/`: 用于保存中国市场的 snapshots（CSV 文件）
-- `jp/`: 用于保存日本市场的 snapshots（CSV 文件）
-- 新增市场时以区域代码创建对应的子目录保存 snapshots（CSV 文件）
+- `cn/`: 用于保存中国市场的 snapshots（CSV 文件）。
 
 ### src/main.rs
 - 程序入口，解析命令行参数、配置日志并调用 `app::bootstrap`。
@@ -88,13 +78,12 @@ src/
 ### src/config/
 - `mod.rs`：对外接口。
 - `cn.rs`: 内置中国市场的 HTTP 请求元数据与指标阈值默认值。
-- `jp.rs`: 内置日本市场（J-Quants API）的认证信息、交易日历与默认阈值，并为授权头提供环境变量占位符（`JQUANTS_EMAIL`、`JQUANTS_PASSWORD` 自动换取 token）。
-- 新增市场时在该目录下新增对应模块并在 `mod.rs` 中注册，同时根据需要扩展 `HistoryProviderKind`。
+- 在新增市场时，可在该目录下增加模块并在 `mod.rs` 中注册，以复用同一抓取和持久化管线。
 
 ### src/fetch/
 - `mod.rs`：抓取逻辑共用的类型与并发限制工具。
-- `snapshots.rs`：异步快照抓取器，支持腾讯与 J-Quants API，生成最新的 CSV 数据集并在被防火墙拦截时给出错误提示。
-- `history.rs`：历史数据抓取任务，按市场自动选择腾讯或 J-Quants 接口，解析至多 420 天的日线并向图表视图广播。
+- `snapshots.rs`：异步快照抓取器，生成最新的 CSV 数据集，并在被腾讯防火墙拦截时给出错误提示。
+- `history.rs`：历史数据抓取任务，调用腾讯接口解析至多 420 天的日线并向图表视图广播。
 
 ### src/records/
 - `mod.rs`：对外暴露数据记录接口。
@@ -110,9 +99,9 @@ src/
 
 ### 运行流程概览
 - 启动：`main.rs` 通过 `app::bootstrap` 构建 `AppController`，加载区域配置并准备持久化目录。
-- 主菜单：`ui::flows::main_menu` 展示入口操作。用户可刷新行情、浏览过滤结果、加载历史 CSV 或切换市场。
+- 主菜单：`ui::flows::main_menu` 展示入口操作。用户可刷新行情、浏览过滤结果或加载历史 CSV。
 - 过滤阈值：`ui::flows::thresholds` 提供列表与弹窗编辑器，支持在同一界面输入上下限、启用/禁用指标，并通过 `S/Ctrl+S` 打开预设命名对话框后即时保存为 JSON。
-- 数据抓取：`fetch::snapshots` 并发请求行情并写入最新 CSV；`fetch::history` 根据 `HistoryProviderKind` 自动选择腾讯或 J-Quants 接口，为图表准备蜡烛图数据。
+- 数据抓取：`fetch::snapshots` 并发请求行情并写入最新 CSV；`fetch::history` 调用腾讯历史接口，为图表准备蜡烛图数据。
 - 结果展示：`ui::flows::results` 渲染可排序表格与内嵌多时间范围蜡烛图，按需拉取历史数据并在表格与图表间联动滚动位置。
 
 ### src/utils/

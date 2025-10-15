@@ -14,7 +14,7 @@ You write only the most **concise, elegant, and efficient code**.
 ### Async & network
 - Use the provided concurrency helpers (`ensure_concurrency_limit`, semaphores) when adding new fetchers.
 - Bubble up errors with context via `Context`/`AppError` so the TUI can surface actionable messages.
-- When adding new providers, extend `HistoryProviderKind` and keep shared request-building helpers (e.g., `expand_env_vars`) reusable.
+- If new providers are introduced, keep request-building helpers reusable and prefer sharing the existing fetch pipelines.
 
 ### UI patterns
 - Build blocks with the existing helpers in `ui::styles` and `ui::components::utils` for consistency.
@@ -23,4 +23,3 @@ You write only the most **concise, elegant, and efficient code**.
 
 ### Naming Conventions
 Modules and files stay `snake_case`; types and traits use `PascalCase`; functions, variables, and filter keys remain `snake_case`. Keep enums for UI states (for example, `AppState`) and prefer small helpers in `src/utils/` for shared formatting or parsing. Rely on `cargo fmt` and follow the ratatui styling helpers summarized in `docs/styles.md`.
-

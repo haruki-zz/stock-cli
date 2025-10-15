@@ -116,12 +116,12 @@ impl SnapshotFetcher {
         let prepared = prepare_request(stock_code, &snapshot_cfg.request)?;
         let response_text = self.perform_request(&prepared, stock_code).await?;
         validate_firewall(&response_text, snapshot_cfg)?;
-        let raw_values = parse_response(stock_code, &response_text, &snapshot_cfg.response)?;
+        let values = parse_response(stock_code, &response_text, &snapshot_cfg.response)?;
         build_stock_data(
             stock_code,
             &self.region_config,
             snapshot_cfg,
-            &raw_values,
+            &values,
             &self.static_names,
         )
     }
@@ -213,11 +213,58 @@ fn build_headers(headers: &HashMap<String, String>) -> FetchResult<HeaderMap> {
     for (key, value) in headers {
         let name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
             .with_context(|| format!("Invalid header name: {}", key))?;
-        let header_value = reqwest::header::HeaderValue::from_str(value)
+        let expanded = expand_env_vars(value)?;
+        let header_value = reqwest::header::HeaderValue::from_str(&expanded)
             .with_context(|| format!("Invalid header value for {}", key))?;
         map.insert(name, header_value);
     }
     Ok(map)
+}
+
+pub(crate) fn expand_env_vars(value: &str) -> FetchResult<String> {
+    let mut result = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '$' && matches!(chars.peek(), Some('{')) {
+            chars.next();
+            let mut name = String::new();
+            let mut closed = false;
+            while let Some(&next) = chars.peek() {
+                if next == '}' {
+                    chars.next();
+                    closed = true;
+                    break;
+                }
+                name.push(next);
+                chars.next();
+            }
+
+            if name.is_empty() {
+                return Err(AppError::message(
+                    "Encountered empty environment placeholder in header",
+                ));
+            }
+
+            if !closed {
+                return Err(AppError::message(
+                    "Unterminated environment placeholder in header",
+                ));
+            }
+
+            let value = std::env::var(&name).with_context(|| {
+                format!(
+                    "Environment variable {} required by request header is not set",
+                    name
+                )
+            })?;
+            result.push_str(&value);
+        } else {
+            result.push(ch);
+        }
+    }
+
+    Ok(result)
 }
 
 fn validate_firewall(response_text: &str, snapshot_cfg: &SnapshotConfig) -> FetchResult<()> {
@@ -262,20 +309,22 @@ fn parse_json_response(
         };
     }
 
-    let array = cursor
-        .as_array()
-        .context("Snapshot payload is not an array of values")?;
+    if let Some(array) = cursor.as_array() {
+        return Ok(array
+            .iter()
+            .map(|value| match value {
+                Value::String(s) => s.clone(),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => String::new(),
+                other => other.to_string(),
+            })
+            .collect());
+    }
 
-    Ok(array
-        .iter()
-        .map(|value| match value {
-            Value::String(s) => s.clone(),
-            Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Null => String::new(),
-            other => other.to_string(),
-        })
-        .collect())
+    Err(AppError::message(
+        "Snapshot payload was not an array of values",
+    ))
 }
 
 fn parse_delimited_response(text: &str, cfg: &DelimitedResponseConfig) -> FetchResult<Vec<String>> {

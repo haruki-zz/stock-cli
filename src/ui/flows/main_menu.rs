@@ -148,13 +148,8 @@ pub fn run_filters_menu() -> Result<FilterMenuAction> {
     let entries: Vec<(&str, &str, FilterMenuAction)> = vec![
         (
             "Set Filters",
-            "Adjust threshold ranges",
+            "Adjust threshold ranges and optionally save",
             FilterMenuAction::Adjust,
-        ),
-        (
-            "Save Filters",
-            "Store current thresholds as a preset",
-            FilterMenuAction::Save,
         ),
         (
             "Load Filters",

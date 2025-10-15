@@ -3,9 +3,10 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::prelude::Stylize;
 use ratatui::text::Line as TextLine;
 use ratatui::{prelude::*, widgets::*};
+use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::ui::styles::{header_text, secondary_line, selection_style};
+use crate::ui::styles::{header_text, secondary_line, selection_style, ACCENT};
 use crate::{
     config::Threshold,
     records::{ensure_metric_thresholds, FILTERABLE_METRICS},
@@ -16,7 +17,8 @@ use crate::{
 };
 
 pub fn run_thresholds_editor(
-    thresholds: &mut std::collections::HashMap<String, Threshold>,
+    thresholds: &mut HashMap<String, Threshold>,
+    mut save_callback: Option<&mut dyn FnMut(&str, &HashMap<String, Threshold>) -> Result<String>>,
 ) -> Result<()> {
     // Guard terminal state while the modal editor is active.
     let mut guard = TerminalGuard::new()?;
@@ -74,21 +76,46 @@ pub fn run_thresholds_editor(
             orig_lower: f64,
             orig_upper: f64,
         },
+        Save {
+            buffer: String,
+            error: Option<String>,
+        },
     }
     let mut mode = Mode::List;
+    enum SaveStatus {
+        Info(String),
+        Error(String),
+    }
+    let mut save_status: Option<SaveStatus> = None;
 
     loop {
         guard.terminal_mut().draw(|f| {
             let size = f.size();
             let chunks = split_vertical(
                 size,
-                &[Constraint::Length(2), Constraint::Min(1), Constraint::Length(1)],
+                &[
+                    Constraint::Length(2),
+                    Constraint::Length(2),
+                    Constraint::Min(1),
+                    Constraint::Length(1),
+                ],
             );
 
             let title = Paragraph::new(header_text(
                 "Edit thresholds — \u{2191}/\u{2193}/j/k move • Space toggles selected metric • Enter edit • Esc back",
             ));
             f.render_widget(title, chunks[0]);
+
+            let save_hint: Line = vec![
+                "Press ".into(),
+                "S".bold().fg(ACCENT),
+                " or ".into(),
+                "Ctrl+S".bold().fg(ACCENT),
+                " to save current filters as a preset".into(),
+            ]
+            .into();
+            let hint = Paragraph::new(save_hint).alignment(Alignment::Center);
+            f.render_widget(hint, chunks[1]);
 
             let total_items = keys.len() + 1;
             let mut list_items = Vec::with_capacity(total_items);
@@ -129,14 +156,23 @@ pub fn run_thresholds_editor(
                     .borders(Borders::ALL)
                     .title(UiRoute::Thresholds.title()),
             );
-            f.render_widget(list, chunks[1]);
+            f.render_widget(list, chunks[2]);
 
-            f.render_widget(
-                Paragraph::new(secondary_line(
-                    "Enter edit • Space toggles ON/OFF • Esc back",
-                )),
-                chunks[2],
-            );
+            let footer = match &save_status {
+                Some(SaveStatus::Info(message)) => Paragraph::new(secondary_line(message)),
+                Some(SaveStatus::Error(message)) => {
+                    Paragraph::new(message.clone().red())
+                }
+                None => {
+                    let base = if save_callback.is_some() {
+                        "Enter edit • Space toggles ON/OFF • s save preset • Esc back"
+                    } else {
+                        "Enter edit • Space toggles ON/OFF • Esc back"
+                    };
+                    Paragraph::new(secondary_line(base))
+                }
+            };
+            f.render_widget(footer, chunks[3]);
 
             if let Mode::Edit {
                 name,
@@ -218,12 +254,52 @@ pub fn run_thresholds_editor(
                     v[3],
                 );
             }
+
+            if let Mode::Save { buffer, error } = &mode {
+                let area = centered_rect(60, 35, size);
+                f.render_widget(Clear, area);
+                let block = Block::default()
+                    .borders(Borders::ALL)
+                    .title("Save filters as preset");
+                f.render_widget(block.clone(), area);
+                let inner = block.inner(area);
+                let sections = split_vertical(
+                    inner,
+                    &[
+                        Constraint::Length(1),
+                        Constraint::Length(3),
+                        Constraint::Length(1),
+                    ],
+                );
+
+                let instructions = Paragraph::new(secondary_line(
+                    "Allowed: letters, numbers, space, '-' and '_'",
+                ));
+                f.render_widget(instructions, sections[0]);
+
+                let mut display = buffer.clone();
+                display.push('_');
+                let input = Paragraph::new(display)
+                    .style(Style::default().fg(ACCENT))
+                    .block(Block::default().borders(Borders::ALL).title("Preset name"));
+                f.render_widget(input, sections[1]);
+
+                let message = if let Some(msg) = error {
+                    Paragraph::new(msg.clone().red())
+                } else {
+                    Paragraph::new(secondary_line(
+                        "Enter save • Esc cancel • Backspace delete",
+                    ))
+                };
+                f.render_widget(message, sections[2]);
+            }
         })?;
 
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(k) = event::read()? {
                 match (&mode, k.code) {
                     (Mode::List, KeyCode::Up) | (Mode::List, KeyCode::Char('k')) => {
+                        save_status = None;
                         if selected == 0 {
                             selected = keys.len();
                         } else {
@@ -231,9 +307,11 @@ pub fn run_thresholds_editor(
                         }
                     }
                     (Mode::List, KeyCode::Down) | (Mode::List, KeyCode::Char('j')) => {
+                        save_status = None;
                         selected = (selected + 1) % (keys.len() + 1);
                     }
                     (Mode::List, KeyCode::Enter) => {
+                        save_status = None;
                         if selected < keys.len() {
                             let name = keys[selected].clone();
                             if let Some(t) = thresholds.get(&name) {
@@ -255,6 +333,7 @@ pub fn run_thresholds_editor(
                     (Mode::List, KeyCode::Char(' '))
                     | (Mode::List, KeyCode::Char('t'))
                     | (Mode::List, KeyCode::Char('v')) => {
+                        save_status = None;
                         if selected < keys.len() {
                             let key_name = keys[selected].clone();
                             if let Some(thr) = thresholds.get_mut(&key_name) {
@@ -264,6 +343,19 @@ pub fn run_thresholds_editor(
                             if let Some(pos) = keys.iter().position(|k| k == &key_name) {
                                 selected = pos;
                             }
+                        }
+                    }
+                    (Mode::List, KeyCode::Char('s')) | (Mode::List, KeyCode::Char('S')) => {
+                        if save_callback.is_some() {
+                            save_status = None;
+                            mode = Mode::Save {
+                                buffer: String::new(),
+                                error: None,
+                            };
+                        } else {
+                            save_status = Some(SaveStatus::Error(
+                                "Saving presets is unavailable in this context.".to_string(),
+                            ));
                         }
                     }
                     (Mode::List, KeyCode::Esc) => {
@@ -288,6 +380,7 @@ pub fn run_thresholds_editor(
                         },
                         key,
                     ) => {
+                        save_status = None;
                         let nm = name.clone();
                         let mut lo = lower.clone();
                         let mut up = upper.clone();
@@ -373,6 +466,64 @@ pub fn run_thresholds_editor(
                             field: fld,
                             orig_lower: *orig_lower,
                             orig_upper: *orig_upper,
+                        };
+                    }
+                    (Mode::Save { buffer, error }, key) => {
+                        let mut buf = buffer.clone();
+                        let mut err = error.clone();
+                        match key {
+                            KeyCode::Backspace => {
+                                buf.pop();
+                                err = None;
+                            }
+                            KeyCode::Char(ch) if !k.modifiers.contains(KeyModifiers::CONTROL) => {
+                                if ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '-' | '_') {
+                                    buf.push(ch);
+                                    err = None;
+                                } else {
+                                    err = Some("Unsupported character".to_string());
+                                }
+                            }
+                            KeyCode::Enter => {
+                                let trimmed = buf.trim();
+                                if trimmed.is_empty() {
+                                    err = Some("Name cannot be empty".to_string());
+                                } else if let Some(cb) = save_callback.as_deref_mut() {
+                                    match cb(trimmed, thresholds) {
+                                        Ok(saved_name) => {
+                                            save_status = Some(SaveStatus::Info(format!(
+                                                "Saved filters as '{}'",
+                                                saved_name
+                                            )));
+                                            mode = Mode::List;
+                                            continue;
+                                        }
+                                        Err(callback_err) => {
+                                            err = Some(callback_err.to_string());
+                                        }
+                                    }
+                                } else {
+                                    err = Some(
+                                        "Saving presets is unavailable in this context."
+                                            .to_string(),
+                                    );
+                                }
+                            }
+                            KeyCode::Esc => {
+                                mode = Mode::List;
+                                save_status = None;
+                                continue;
+                            }
+                            KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                                mode = Mode::List;
+                                save_status = None;
+                                continue;
+                            }
+                            _ => {}
+                        }
+                        mode = Mode::Save {
+                            buffer: buf,
+                            error: err,
                         };
                     }
                     _ => {}

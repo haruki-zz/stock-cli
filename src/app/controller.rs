@@ -5,8 +5,7 @@ use crate::config::Config;
 use crate::error::{AppError, Context, Result};
 use crate::ui::{
     run_csv_picker, run_fetch_progress, run_filters_menu, run_main_menu, run_market_picker,
-    run_preset_picker, run_results_table, run_save_preset_dialog, run_thresholds_editor,
-    FilterMenuAction, MenuAction,
+    run_preset_picker, run_results_table, run_thresholds_editor, FilterMenuAction, MenuAction,
 };
 use crate::utils::sanitize_preset_name;
 
@@ -134,26 +133,37 @@ impl AppController {
         loop {
             match run_filters_menu()? {
                 FilterMenuAction::Adjust => {
-                    run_thresholds_editor(region_state.thresholds_mut())?;
-                }
-                FilterMenuAction::Save => match run_save_preset_dialog()? {
-                    Some(name) => match sanitize_preset_name(&name) {
-                        Some(file_name) => {
-                            if let Err(err) = region_state
-                                .records()
-                                .save_threshold_preset(&file_name, region_state.thresholds())
-                            {
-                                eprintln!("Failed to save filters: {}", err);
-                            } else {
-                                println!("Filters saved as '{}'.", file_name);
-                            }
+                    let presets_dir = region_state.records().presets_dir().to_path_buf();
+                    let mut save_cb = move |raw_name: &str,
+                                            thresholds: &std::collections::HashMap<
+                        String,
+                        crate::config::Threshold,
+                    >|
+                          -> Result<String> {
+                        let trimmed = raw_name.trim();
+                        if trimmed.is_empty() {
+                            return Err(AppError::message("Preset name cannot be empty."));
                         }
-                        None => println!(
-                            "Preset name must contain letters, numbers, spaces, '-' or '_'."
-                        ),
-                    },
-                    None => println!("Save filters cancelled."),
-                },
+
+                        let Some(file_name) = sanitize_preset_name(trimmed) else {
+                            return Err(AppError::message(
+                                "Preset name must contain letters, numbers, spaces, '-' or '_'.",
+                            ));
+                        };
+
+                        let mut normalized = thresholds.clone();
+                        crate::records::ensure_metric_thresholds(&mut normalized);
+                        crate::records::presets::save_thresholds(
+                            std::path::Path::new(&presets_dir),
+                            &file_name,
+                            &normalized,
+                        )?;
+
+                        Ok(file_name)
+                    };
+
+                    run_thresholds_editor(region_state.thresholds_mut(), Some(&mut save_cb))?;
+                }
                 FilterMenuAction::Load => {
                     let (_, filters_dir) = region_state.directories();
                     match run_preset_picker(&filters_dir)? {

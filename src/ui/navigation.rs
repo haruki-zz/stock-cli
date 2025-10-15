@@ -6,7 +6,6 @@ pub enum UiRoute {
     Results,
     CsvPicker,
     PresetPicker,
-    SavePreset,
     Thresholds,
     FetchProgress,
     MarketPicker,
@@ -22,7 +21,6 @@ impl UiRoute {
             UiRoute::Results => "Filtered Results",
             UiRoute::CsvPicker => "Load CSV",
             UiRoute::PresetPicker => "Load Filters",
-            UiRoute::SavePreset => "Save Filters",
             UiRoute::Thresholds => "Edit Thresholds",
             UiRoute::FetchProgress => "Fetching Data",
             UiRoute::MarketPicker => "Select Market",
@@ -46,7 +44,6 @@ pub enum MenuAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterMenuAction {
     Adjust,
-    Save,
     Load,
     Back,
 }

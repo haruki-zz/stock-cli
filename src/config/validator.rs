@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use crate::error::{AppError, Result};
 
 use super::{
-    loader::RegionDescriptor, InfoIndex, JsonPathSegment, JsonResponseConfig, ProviderConfig,
-    RequestConfig, SnapshotConfig, SnapshotResponse, Threshold,
+    loader::RegionDescriptor, HistoryConfig, HistoryFieldIndices, HistoryResponse, InfoIndex,
+    JsonHistoryRowFormat, JsonPathSegment, JsonResponseConfig, ProviderConfig, RequestConfig,
+    SnapshotConfig, SnapshotResponse, Threshold,
 };
 
 /// Validate a single region descriptor and surface descriptive errors.
@@ -72,26 +73,24 @@ fn validate_provider(descriptor: &RegionDescriptor, issues: &mut Vec<String>) {
     match &descriptor.provider {
         ProviderConfig::Tencent(provider) => {
             validate_snapshot_config(&provider.snapshot, issues);
-            validate_tencent_history_config(&provider.history.endpoint, issues);
+            validate_history_config(&provider.history, issues);
         }
         ProviderConfig::Stooq(provider) => {
             validate_snapshot_config(&provider.snapshot, issues);
-            if provider.history.endpoint.trim().is_empty() {
-                issues.push("provider.history.endpoint must not be empty".to_string());
-            }
+            validate_history_config(&provider.history, issues);
         }
     }
 }
 
 fn validate_snapshot_config(snapshot: &SnapshotConfig, issues: &mut Vec<String>) {
-    validate_request(&snapshot.request, issues);
+    validate_request(&snapshot.request, issues, "snapshot");
     validate_snapshot_response(&snapshot.response, issues);
     validate_info_indices(&snapshot.info_idxs, issues);
 }
 
-fn validate_request(request: &RequestConfig, issues: &mut Vec<String>) {
+fn validate_request(request: &RequestConfig, issues: &mut Vec<String>, context: &str) {
     if request.url_template.trim().is_empty() {
-        issues.push("snapshot.request.url_template must not be empty".to_string());
+        issues.push(format!("{context}.request.url_template must not be empty"));
     }
 
     match request.method {
@@ -153,9 +152,83 @@ fn validate_info_indices(info_idxs: &HashMap<String, InfoIndex>, issues: &mut Ve
     }
 }
 
-fn validate_tencent_history_config(endpoint: &str, issues: &mut Vec<String>) {
-    if endpoint.trim().is_empty() {
-        issues.push("provider.history.endpoint must not be empty".to_string());
+fn validate_history_config(history: &HistoryConfig, issues: &mut Vec<String>) {
+    validate_request(&history.request, issues, "history");
+
+    if let Some(limit) = history.limit {
+        if limit == 0 {
+            issues.push("history.limit must be greater than zero when provided".to_string());
+        }
+    }
+
+    match &history.response {
+        HistoryResponse::JsonRows(json) => {
+            if json.data_path.is_empty() {
+                issues.push(
+                    "history.response.json_rows.path must contain at least one segment".to_string(),
+                );
+            }
+
+            if !json.data_path.iter().any(matches_symbol_segment) {
+                issues.push(
+                    "history.response.json_rows.path should reference `{symbol}` for code substitution"
+                        .to_string(),
+                );
+            }
+
+            if json.date_format.trim().is_empty() {
+                issues.push("history.response.json_rows.date_format must not be empty".to_string());
+            }
+
+            match &json.row_format {
+                JsonHistoryRowFormat::Array(indices) => {
+                    validate_history_indices(indices, "history.response.json_rows.columns", issues);
+                }
+                JsonHistoryRowFormat::StringDelimited { delimiter, indices } => {
+                    if *delimiter == '\0' {
+                        issues.push(
+                            "history.response.json_rows.row.delimiter must be a visible character"
+                                .to_string(),
+                        );
+                    }
+                    validate_history_indices(indices, "history.response.json_rows.columns", issues);
+                }
+            }
+        }
+        HistoryResponse::CsvRows(csv) => {
+            if csv.date_format.trim().is_empty() {
+                issues.push("history.response.csv_rows.date_format must not be empty".to_string());
+            }
+            if csv.delimiter == '\0' {
+                issues.push(
+                    "history.response.csv_rows.delimiter must be a visible character".to_string(),
+                );
+            }
+            validate_history_indices(&csv.indices, "history.response.csv_rows.columns", issues);
+        }
+    }
+}
+
+fn validate_history_indices(
+    indices: &HistoryFieldIndices,
+    context: &str,
+    issues: &mut Vec<String>,
+) {
+    let mut seen = HashMap::<usize, &str>::new();
+    let fields = [
+        ("date", indices.date),
+        ("open", indices.open),
+        ("high", indices.high),
+        ("low", indices.low),
+        ("close", indices.close),
+    ];
+
+    for (label, idx) in fields {
+        if let Some(existing) = seen.insert(idx, label) {
+            issues.push(format!(
+                "{context} maps index {idx} to both `{existing}` and `{label}`"
+            ));
+        }
     }
 }
 

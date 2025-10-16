@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
 use super::{
-    CodeTransform, FirewallWarning, HttpMethod, InfoIndex, JsonPathSegment, JsonResponseConfig,
-    ProviderConfig, RegionConfig, RequestConfig, SnapshotConfig, SnapshotResponse,
-    TencentHistoryConfig, TencentProviderConfig, Threshold,
+    CodeTransform, FirewallWarning, HistoryConfig, HistoryFieldIndices, HistoryResponse,
+    HttpMethod, InfoIndex, JsonHistoryResponse, JsonHistoryRowFormat, JsonPathSegment,
+    JsonResponseConfig, ProviderConfig, RegionConfig, RequestConfig, SnapshotConfig,
+    SnapshotResponse, TencentProviderConfig, Threshold,
 };
 
+#[allow(dead_code)]
 pub fn region() -> RegionConfig {
     let info_idxs = HashMap::from([
         ("stockName".to_string(), InfoIndex { index: 1 }),
@@ -93,16 +95,49 @@ pub fn region() -> RegionConfig {
         }),
     };
 
-    let provider = ProviderConfig::Tencent(TencentProviderConfig {
-        snapshot,
-        history: TencentHistoryConfig {
-            endpoint: "https://ifzq.gtimg.cn/appstock/app/kline/kline".to_string(),
-            referer: "https://gu.qq.com/".to_string(),
-            user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36".to_string(),
-            accept_language: "en-US,en;q=0.9".to_string(),
-            record_days: 420,
+    let history_headers = HashMap::from([
+        (
+            "Referer".to_string(),
+            "https://gu.qq.com/".to_string(),
+        ),
+        (
+            "User-Agent".to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36".to_string(),
+        ),
+        (
+            "Accept-Language".to_string(),
+            "en-US,en;q=0.9".to_string(),
+        ),
+    ]);
+
+    let history = HistoryConfig {
+        request: RequestConfig {
+            method: HttpMethod::Get,
+            url_template:
+                "https://ifzq.gtimg.cn/appstock/app/kline/kline?param={symbol},day,,,{record_days}"
+                    .to_string(),
+            headers: history_headers,
+            code_transform: CodeTransform::default(),
         },
-    });
+        response: HistoryResponse::JsonRows(JsonHistoryResponse {
+            data_path: vec![
+                JsonPathSegment::Key("data".to_string()),
+                JsonPathSegment::StockCode,
+                JsonPathSegment::Key("day".to_string()),
+            ],
+            row_format: JsonHistoryRowFormat::Array(HistoryFieldIndices {
+                date: 0,
+                open: 1,
+                close: 2,
+                high: 3,
+                low: 4,
+            }),
+            date_format: "%Y-%m-%d".to_string(),
+        }),
+        limit: Some(420),
+    };
+
+    let provider = ProviderConfig::Tencent(TencentProviderConfig { snapshot, history });
 
     RegionConfig {
         code: "CN".to_string(),

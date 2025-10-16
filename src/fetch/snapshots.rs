@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::config::{
-    DelimitedResponseConfig, JsonPathSegment, RegionConfig, SnapshotConfig, SnapshotResponse,
-};
+use crate::config::{DelimitedResponseConfig, RegionConfig, SnapshotConfig, SnapshotResponse};
 use crate::error::{AppError, Context};
 use futures::stream::{self, StreamExt};
-use reqwest::{header::HeaderMap, Client, StatusCode};
+use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use tokio::time::{sleep, Duration};
 
+use crate::fetch::decode::{split_csv_line, value_to_string, walk_json_path};
+use crate::fetch::request::{prepare_request, PreparedRequest, RequestContext};
 use crate::fetch::{ensure_concurrency_limit, FetchResult, SNAPSHOT_CONCURRENCY_LIMIT};
 
 #[derive(Debug, Clone)]
@@ -113,7 +113,14 @@ impl SnapshotFetcher {
 
     async fn fetch_stock_data(&self, stock_code: &str) -> FetchResult<StockData> {
         let snapshot_cfg = self.snapshot_config();
-        let prepared = prepare_request(stock_code, &snapshot_cfg.request)?;
+        let prepared = prepare_request(
+            &snapshot_cfg.request,
+            RequestContext {
+                stock_code,
+                region_code: &self.region_config.code,
+                extras: &[],
+            },
+        )?;
         let response_text = self.perform_request(&prepared, stock_code).await?;
         validate_firewall(&response_text, snapshot_cfg)?;
         let values = parse_response(stock_code, &response_text, &snapshot_cfg.response)?;
@@ -189,84 +196,6 @@ impl SnapshotFetcher {
     }
 }
 
-struct PreparedRequest {
-    url: String,
-    headers: HeaderMap,
-}
-
-fn prepare_request(
-    stock_code: &str,
-    request: &crate::config::RequestConfig,
-) -> FetchResult<PreparedRequest> {
-    if matches!(request.method, crate::config::HttpMethod::Get) {
-        let code = request.code_transform.apply(stock_code);
-        let url = request.url_template.replace("{code}", &code);
-        let headers = build_headers(&request.headers)?;
-        Ok(PreparedRequest { url, headers })
-    } else {
-        Err(AppError::message("Unsupported HTTP method"))
-    }
-}
-
-fn build_headers(headers: &HashMap<String, String>) -> FetchResult<HeaderMap> {
-    let mut map = HeaderMap::new();
-    for (key, value) in headers {
-        let name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
-            .with_context(|| format!("Invalid header name: {}", key))?;
-        let expanded = expand_env_vars(value)?;
-        let header_value = reqwest::header::HeaderValue::from_str(&expanded)
-            .with_context(|| format!("Invalid header value for {}", key))?;
-        map.insert(name, header_value);
-    }
-    Ok(map)
-}
-
-pub(crate) fn expand_env_vars(value: &str) -> FetchResult<String> {
-    let mut result = String::with_capacity(value.len());
-    let mut chars = value.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        if ch == '$' && matches!(chars.peek(), Some('{')) {
-            chars.next();
-            let mut name = String::new();
-            let mut closed = false;
-            while let Some(&next) = chars.peek() {
-                if next == '}' {
-                    chars.next();
-                    closed = true;
-                    break;
-                }
-                name.push(next);
-                chars.next();
-            }
-
-            if name.is_empty() {
-                return Err(AppError::message(
-                    "Encountered empty environment placeholder in header",
-                ));
-            }
-
-            if !closed {
-                return Err(AppError::message(
-                    "Unterminated environment placeholder in header",
-                ));
-            }
-
-            let value = std::env::var(&name).with_context(|| {
-                format!(
-                    "Environment variable {} required by request header is not set",
-                    name
-                )
-            })?;
-            result.push_str(&value);
-        } else {
-            result.push(ch);
-        }
-    }
-
-    Ok(result)
-}
-
 fn validate_firewall(response_text: &str, snapshot_cfg: &SnapshotConfig) -> FetchResult<()> {
     if let Some(warning) = &snapshot_cfg.firewall_warning {
         if response_text.contains(&warning.text) {
@@ -293,38 +222,11 @@ fn parse_json_response(
     cfg: &crate::config::JsonResponseConfig,
 ) -> FetchResult<Vec<String>> {
     let json: Value = serde_json::from_str(text).context("Failed to parse JSON response")?;
-    let mut cursor = &json;
-
-    for segment in &cfg.data_path {
-        cursor = match segment {
-            JsonPathSegment::Key(key) => cursor.get(key).ok_or_else(|| {
-                AppError::message(format!("Missing key '{}' in snapshot payload", key))
-            })?,
-            JsonPathSegment::StockCode => cursor.get(stock_code).ok_or_else(|| {
-                AppError::message(format!(
-                    "Missing data for stock {} in snapshot payload",
-                    stock_code
-                ))
-            })?,
-        };
-    }
-
-    if let Some(array) = cursor.as_array() {
-        return Ok(array
-            .iter()
-            .map(|value| match value {
-                Value::String(s) => s.clone(),
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
-                Value::Null => String::new(),
-                other => other.to_string(),
-            })
-            .collect());
-    }
-
-    Err(AppError::message(
-        "Snapshot payload was not an array of values",
-    ))
+    let node = walk_json_path(&json, &cfg.data_path, stock_code, None)?;
+    let array = node
+        .as_array()
+        .ok_or_else(|| AppError::message("Snapshot payload was not an array of values"))?;
+    Ok(array.iter().map(value_to_string).collect())
 }
 
 fn parse_delimited_response(text: &str, cfg: &DelimitedResponseConfig) -> FetchResult<Vec<String>> {
@@ -334,9 +236,9 @@ fn parse_delimited_response(text: &str, cfg: &DelimitedResponseConfig) -> FetchR
         .find(|line| !line.trim().is_empty())
         .context("No quote data returned")?;
 
-    Ok(line
-        .split(cfg.delimiter)
-        .map(|field| field.trim().trim_matches('"').to_string())
+    Ok(split_csv_line(line, cfg.delimiter)
+        .into_iter()
+        .map(|field| field.into_owned())
         .collect())
 }
 
@@ -436,7 +338,11 @@ fn amplitude(high: f64, low: f64, prev: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{InfoIndex, ProviderConfig, StooqHistoryConfig, StooqProviderConfig};
+    use crate::config::{
+        CodeTransform, HistoryConfig, HistoryFieldIndices, HistoryResponse, HttpMethod, InfoIndex,
+        JsonHistoryResponse, JsonHistoryRowFormat, JsonPathSegment, ProviderConfig, RequestConfig,
+        StooqProviderConfig,
+    };
 
     #[test]
     fn parses_stooq_line() {
@@ -462,17 +368,35 @@ mod tests {
             firewall_warning: None,
         };
 
+        let history_config = HistoryConfig {
+            request: RequestConfig {
+                method: HttpMethod::Get,
+                url_template: "https://example.com".to_string(),
+                headers: HashMap::new(),
+                code_transform: CodeTransform::default(),
+            },
+            response: HistoryResponse::JsonRows(JsonHistoryResponse {
+                data_path: vec![JsonPathSegment::Key("noop".to_string())],
+                row_format: JsonHistoryRowFormat::Array(HistoryFieldIndices {
+                    date: 0,
+                    open: 1,
+                    high: 2,
+                    low: 3,
+                    close: 4,
+                }),
+                date_format: "%Y-%m-%d".to_string(),
+            }),
+            limit: None,
+        };
+
         let region_config = RegionConfig {
             code: "TEST".into(),
             name: "Test".into(),
             stock_code_file: String::new(),
             thresholds: HashMap::new(),
             provider: ProviderConfig::Stooq(StooqProviderConfig {
-                symbol_suffix: ".test".into(),
                 snapshot: snapshot_cfg.clone(),
-                history: StooqHistoryConfig {
-                    endpoint: String::new(),
-                },
+                history: history_config,
             }),
         };
 

@@ -11,6 +11,7 @@ use ratatui::{
 };
 use std::{cmp::Ordering, collections::HashMap, sync::mpsc::TryRecvError};
 
+use crate::config::RegionConfig;
 use crate::fetch::{spawn_history_fetch, Candle, HistoryReceiver, StockData};
 use crate::ui::components::utils::split_vertical;
 
@@ -39,7 +40,8 @@ pub struct ChartState {
 }
 
 impl ChartState {
-    pub fn prepare_history(&mut self, stock_code: &str, market: &str) {
+    pub fn prepare_history(&mut self, region: &RegionConfig, stock_code: &str) {
+        let market = region.code.as_str();
         let key = cache_key(market, stock_code);
         if self.active_key.as_deref() != Some(key.as_str()) {
             self.active_key = Some(key.clone());
@@ -82,8 +84,7 @@ impl ChartState {
         {
             return;
         }
-
-        let rx = spawn_history_fetch(stock_code, market);
+        let rx = spawn_history_fetch(stock_code, region);
         self.pending_fetches.insert(key, rx);
         self.last_error = None;
     }

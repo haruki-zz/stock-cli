@@ -100,30 +100,62 @@ pub struct DelimitedResponseConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct TencentHistoryConfig {
-    pub endpoint: String,
-    pub referer: String,
-    pub user_agent: String,
-    pub accept_language: String,
-    pub record_days: usize,
+pub struct HistoryConfig {
+    pub request: RequestConfig,
+    pub response: HistoryResponse,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub enum HistoryResponse {
+    JsonRows(JsonHistoryResponse),
+    #[allow(dead_code)]
+    CsvRows(CsvHistoryResponse),
+}
+
+#[derive(Debug, Clone)]
+pub struct JsonHistoryResponse {
+    pub data_path: Vec<JsonPathSegment>,
+    pub row_format: JsonHistoryRowFormat,
+    pub date_format: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum JsonHistoryRowFormat {
+    Array(HistoryFieldIndices),
+    StringDelimited {
+        delimiter: char,
+        indices: HistoryFieldIndices,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct CsvHistoryResponse {
+    pub delimiter: char,
+    pub skip_lines: usize,
+    pub indices: HistoryFieldIndices,
+    pub date_format: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoryFieldIndices {
+    pub date: usize,
+    pub open: usize,
+    pub high: usize,
+    pub low: usize,
+    pub close: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct TencentProviderConfig {
     pub snapshot: SnapshotConfig,
-    pub history: TencentHistoryConfig,
-}
-
-#[derive(Debug, Clone)]
-pub struct StooqHistoryConfig {
-    pub endpoint: String,
+    pub history: HistoryConfig,
 }
 
 #[derive(Debug, Clone)]
 pub struct StooqProviderConfig {
-    pub symbol_suffix: String,
     pub snapshot: SnapshotConfig,
-    pub history: StooqHistoryConfig,
+    pub history: HistoryConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +170,13 @@ impl ProviderConfig {
         match self {
             ProviderConfig::Tencent(cfg) => &cfg.snapshot,
             ProviderConfig::Stooq(cfg) => &cfg.snapshot,
+        }
+    }
+
+    pub fn history(&self) -> &HistoryConfig {
+        match self {
+            ProviderConfig::Tencent(cfg) => &cfg.history,
+            ProviderConfig::Stooq(cfg) => &cfg.history,
         }
     }
 }
@@ -164,6 +203,7 @@ pub use registry::ConfigRegistry;
 pub use validator::{validate_region_descriptor, validate_region_descriptors};
 
 impl Config {
+    #[allow(dead_code)]
     pub fn builtin() -> Self {
         let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         match load_region_descriptors(&root) {
@@ -199,6 +239,7 @@ impl Config {
     }
 
     /// Retrieve the full region configuration, including disabled entries.
+    #[allow(dead_code)]
     pub fn get_region_config(&self, region_code: &str) -> Option<&RegionConfig> {
         self.regions.get(region_code)
     }

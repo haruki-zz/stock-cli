@@ -92,7 +92,7 @@ impl AppController {
                     let codes = region_state
                         .database()
                         .filter_stocks(region_state.thresholds());
-                    run_results_table(region_state.database(), &codes)?;
+                    run_results_table(region_state.config(), region_state.database(), &codes)?;
                 }
                 MenuAction::Filters => {
                     self.handle_filters(region_state)?;

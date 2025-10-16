@@ -9,9 +9,10 @@ use serde::Deserialize;
 use crate::error::{AppError, Context, Result};
 
 use super::{
-    CodeTransform, DelimitedResponseConfig, FirewallWarning, HttpMethod, InfoIndex,
-    JsonPathSegment, JsonResponseConfig, ProviderConfig, RequestConfig, SnapshotConfig,
-    SnapshotResponse, TencentHistoryConfig, TencentProviderConfig, Threshold,
+    CodeTransform, CsvHistoryResponse, DelimitedResponseConfig, FirewallWarning, HistoryConfig,
+    HistoryFieldIndices, HistoryResponse, HttpMethod, InfoIndex, JsonHistoryResponse,
+    JsonHistoryRowFormat, JsonPathSegment, JsonResponseConfig, ProviderConfig, RequestConfig,
+    SnapshotConfig, SnapshotResponse, StooqProviderConfig, TencentProviderConfig, Threshold,
 };
 use crate::config::validator;
 
@@ -192,7 +193,11 @@ impl RawThreshold {
 enum RawProviderConfig {
     Tencent {
         snapshot: RawSnapshotConfig,
-        history: RawTencentHistoryConfig,
+        history: RawHistoryConfig,
+    },
+    Stooq {
+        snapshot: RawSnapshotConfig,
+        history: RawHistoryConfig,
     },
 }
 
@@ -200,11 +205,15 @@ impl RawProviderConfig {
     fn into_provider_config(self) -> Result<ProviderConfig> {
         match self {
             RawProviderConfig::Tencent { snapshot, history } => {
-                let snapshot = snapshot.into_snapshot_config()?;
-                let history = history.into_history_config()?;
                 Ok(ProviderConfig::Tencent(TencentProviderConfig {
-                    snapshot,
-                    history,
+                    snapshot: snapshot.into_snapshot_config()?,
+                    history: history.into_history_config()?,
+                }))
+            }
+            RawProviderConfig::Stooq { snapshot, history } => {
+                Ok(ProviderConfig::Stooq(StooqProviderConfig {
+                    snapshot: snapshot.into_snapshot_config()?,
+                    history: history.into_history_config()?,
                 }))
             }
         }
@@ -246,36 +255,122 @@ impl RawSnapshotConfig {
 }
 
 #[derive(Debug, Deserialize)]
-struct RawTencentHistoryConfig {
-    endpoint: String,
-    headers: HashMap<String, String>,
-    record_days: usize,
+struct RawHistoryConfig {
+    request: RawRequestConfig,
+    response: RawHistoryResponse,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
-impl RawTencentHistoryConfig {
-    fn into_history_config(self) -> Result<TencentHistoryConfig> {
-        let referer =
-            self.headers.get("Referer").cloned().ok_or_else(|| {
-                AppError::message("Tencent history headers must include `Referer`")
-            })?;
-        let user_agent = self.headers.get("User-Agent").cloned().ok_or_else(|| {
-            AppError::message("Tencent history headers must include `User-Agent`")
-        })?;
-        let accept_language = self
-            .headers
-            .get("Accept-Language")
-            .cloned()
-            .ok_or_else(|| {
-                AppError::message("Tencent history headers must include `Accept-Language`")
-            })?;
-
-        Ok(TencentHistoryConfig {
-            endpoint: self.endpoint,
-            referer,
-            user_agent,
-            accept_language,
-            record_days: self.record_days,
+impl RawHistoryConfig {
+    fn into_history_config(self) -> Result<HistoryConfig> {
+        Ok(HistoryConfig {
+            request: self.request.into_request()?,
+            response: self.response.into_history_response()?,
+            limit: self.limit,
         })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum RawHistoryResponse {
+    JsonRows {
+        path: Vec<String>,
+        date_format: String,
+        columns: RawHistoryColumns,
+        #[serde(default)]
+        row: RawJsonHistoryRowFormat,
+    },
+    CsvRows {
+        delimiter: String,
+        skip_lines: usize,
+        date_format: String,
+        columns: RawHistoryColumns,
+    },
+}
+
+impl RawHistoryResponse {
+    fn into_history_response(self) -> Result<HistoryResponse> {
+        match self {
+            RawHistoryResponse::JsonRows {
+                path,
+                date_format,
+                columns,
+                row,
+            } => {
+                let segments = path
+                    .into_iter()
+                    .map(parse_json_path_segment)
+                    .collect::<Result<Vec<_>>>()?;
+                let indices = columns.into_indices();
+                let row_format = row.into_row_format(indices)?;
+                Ok(HistoryResponse::JsonRows(JsonHistoryResponse {
+                    data_path: segments,
+                    row_format,
+                    date_format,
+                }))
+            }
+            RawHistoryResponse::CsvRows {
+                delimiter,
+                skip_lines,
+                date_format,
+                columns,
+            } => {
+                let character = delimiter.chars().next().ok_or_else(|| {
+                    AppError::message("history.response.csv delimiter must not be empty")
+                })?;
+
+                Ok(HistoryResponse::CsvRows(CsvHistoryResponse {
+                    delimiter: character,
+                    skip_lines,
+                    indices: columns.into_indices(),
+                    date_format,
+                }))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawHistoryColumns {
+    date: usize,
+    open: usize,
+    high: usize,
+    low: usize,
+    close: usize,
+}
+
+impl RawHistoryColumns {
+    fn into_indices(self) -> HistoryFieldIndices {
+        HistoryFieldIndices {
+            date: self.date,
+            open: self.open,
+            high: self.high,
+            low: self.low,
+            close: self.close,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RawJsonHistoryRowFormat {
+    delimiter: Option<String>,
+}
+
+impl RawJsonHistoryRowFormat {
+    fn into_row_format(self, indices: HistoryFieldIndices) -> Result<JsonHistoryRowFormat> {
+        if let Some(delimiter) = self.delimiter {
+            let ch = delimiter.chars().next().ok_or_else(|| {
+                AppError::message("history.response.json_rows.row.delimiter must not be empty")
+            })?;
+            Ok(JsonHistoryRowFormat::StringDelimited {
+                delimiter: ch,
+                indices,
+            })
+        } else {
+            Ok(JsonHistoryRowFormat::Array(indices))
+        }
     }
 }
 

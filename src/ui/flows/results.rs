@@ -1,3 +1,4 @@
+use crate::config::RegionConfig;
 use crate::error::Result;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{prelude::*, widgets::*};
@@ -148,6 +149,7 @@ fn build_sorted_rows<'a>(
 fn rebuild_sorted_rows<'a>(
     database: &'a StockDatabase,
     codes: &[String],
+    region: &RegionConfig,
     sort_state: SortState,
     current_code: Option<String>,
     selected: &mut usize,
@@ -180,7 +182,7 @@ fn rebuild_sorted_rows<'a>(
 
     if chart_state.show {
         if let Some(stock) = rows.get(*selected) {
-            chart_state.prepare_history(&stock.stock_code, &stock.market);
+            chart_state.prepare_history(region, &stock.stock_code);
         } else {
             chart_state.clear_active();
         }
@@ -190,7 +192,11 @@ fn rebuild_sorted_rows<'a>(
 }
 
 /// Display the filtered dataset with a movable cursor, summary panel, and optional chart.
-pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<()> {
+pub fn run_results_table(
+    region: &RegionConfig,
+    database: &StockDatabase,
+    codes: &[String],
+) -> Result<()> {
     let mut guard = TerminalGuard::new()?;
 
     let mut sort_state = SortState::new();
@@ -203,7 +209,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
     loop {
         if chart_state.show {
             if let Some(stock) = rows_data.get(selected) {
-                chart_state.prepare_history(&stock.stock_code, &stock.market);
+                chart_state.prepare_history(region, &stock.stock_code);
             } else {
                 chart_state.clear_active();
             }
@@ -410,7 +416,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             if let Some(stock) = rows_data.get(selected) {
                                 chart_state.show = true;
                                 chart_state.timeframe_index = 0;
-                                chart_state.prepare_history(&stock.stock_code, &stock.market);
+                                chart_state.prepare_history(region, &stock.stock_code);
                             }
                         } else {
                             chart_state.next_timeframe();
@@ -435,6 +441,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                         rows_data = rebuild_sorted_rows(
                             database,
                             codes,
+                            region,
                             sort_state,
                             current_code,
                             &mut selected,
@@ -451,6 +458,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                         rows_data = rebuild_sorted_rows(
                             database,
                             codes,
+                            region,
                             sort_state,
                             current_code,
                             &mut selected,
@@ -479,7 +487,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
+                                    chart_state.prepare_history(region, &stock.stock_code);
                                 }
                             }
                         }
@@ -494,7 +502,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             }
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
+                                    chart_state.prepare_history(region, &stock.stock_code);
                                 }
                             }
                         }
@@ -509,8 +517,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                                 }
                                 if chart_state.show {
                                     if let Some(stock) = rows_data.get(selected) {
-                                        chart_state
-                                            .prepare_history(&stock.stock_code, &stock.market);
+                                        chart_state.prepare_history(region, &stock.stock_code);
                                     }
                                 }
                             }
@@ -526,8 +533,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                                 }
                                 if chart_state.show {
                                     if let Some(stock) = rows_data.get(selected) {
-                                        chart_state
-                                            .prepare_history(&stock.stock_code, &stock.market);
+                                        chart_state.prepare_history(region, &stock.stock_code);
                                     }
                                 }
                             }
@@ -539,7 +545,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             offset = 0;
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
+                                    chart_state.prepare_history(region, &stock.stock_code);
                                 }
                             }
                         }
@@ -550,7 +556,7 @@ pub fn run_results_table(database: &StockDatabase, codes: &[String]) -> Result<(
                             offset = selected.saturating_sub(capacity.saturating_sub(1));
                             if chart_state.show {
                                 if let Some(stock) = rows_data.get(selected) {
-                                    chart_state.prepare_history(&stock.stock_code, &stock.market);
+                                    chart_state.prepare_history(region, &stock.stock_code);
                                 }
                             }
                         }

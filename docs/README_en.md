@@ -19,7 +19,7 @@ Stock CLI is a terminal-first companion for exploring the China A-share market. 
 
 ## Using The TUI
 - Main menu
-  - `Show Filtered` – browse stocks that pass the active thresholds; use `s` to change the sort column, `d` to toggle direction, Enter to open the inline chart, and `←/→` to swap the displayed time range.
+  - `Show Filtered` – browse stocks that pass the active thresholds; use `s` to change the sort column, `d` to toggle direction, and Enter to open the inline chart.
   - `Filters` – edit lower/upper bounds, save presets, or load existing ones. Within the editor, Tab or the arrow keys jump between fields; Enter saves the change.
   - `Refresh Data` – fetch the latest snapshot and persist it to disk.
   - `Load CSV` – pick a historical snapshot from `assets/snapshots/` to explore.
@@ -37,4 +37,14 @@ Stock CLI is a terminal-first companion for exploring the China A-share market. 
 - Stock universe: `stock_code.csv` (required). New markets belong in `assets/.markets/<region>.csv`.
 - Snapshots: stored in `assets/snapshots/<region>/`.
 - Filter presets: stored in `assets/filters/<region>/`.
-- Adding another region: implement a configuration module in `src/config/`, register it in `Config::builtin`, and reuse the existing fetch and UI flows.
+- Adding another region: copy `docs/examples/sample_region.json` to `assets/configs/<code>.json`, adjust the endpoints/columns, and provide `assets/.markets/<code>.csv`. Restart the app or use the market reload action to pick it up.
+
+## Adding a New Market (Example)
+
+Copy `docs/examples/sample_region.json` into `assets/configs/<code>.json`, adjust the fields, and place the matching CSV under `assets/.markets/<code>.csv`. The sample demonstrates:
+
+- `storage` overrides for snapshots/presets directories.
+- Snapshot and history request templates with `{region}` and `{symbol}` placeholders.
+- JSON response mappings for both tabular and historical data.
+
+Remember to keep the CSV and JSON in sync and restart the CLI (or trigger a market reload) so the new descriptor is picked up.

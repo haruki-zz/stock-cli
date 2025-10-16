@@ -367,7 +367,7 @@ pub fn run_results_table(
             )
         } else if chart_state.show {
             format!(
-                "Row {}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter/←/→/h/l timeframe • X close • Esc back",
+                "{}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Esc back",
                 selected + 1,
                 total,
                 offset + 1,
@@ -378,7 +378,7 @@ pub fn run_results_table(
             )
         } else {
             format!(
-                "Row {}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter chart • Esc back",
+                "{}/{} • {}-{} of {} • Sort: {} {} • s next • d flip • ↑/↓ move • PgUp/PgDn page • Home/End jump • Enter chart • Esc back",
                 selected + 1,
                 total,
                 offset + 1,
@@ -418,8 +418,6 @@ pub fn run_results_table(
                                 chart_state.timeframe_index = 0;
                                 chart_state.prepare_history(region, &stock.stock_code);
                             }
-                        } else {
-                            chart_state.next_timeframe();
                         }
                     }
                     KeyCode::Esc => {

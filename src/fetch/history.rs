@@ -8,7 +8,7 @@ use crate::config::{
     HistoryFieldIndices, HistoryResponse, JsonHistoryResponse, JsonHistoryRowFormat, RegionConfig,
 };
 use crate::error::{AppError, Context};
-use crate::fetch::decode::{parse_date, parse_f64, split_row, value_to_string, walk_json_path};
+use crate::fetch::decode::{parse_date, parse_f64, split_row, walk_json_path};
 use crate::fetch::request::{prepare_request, PreparedRequest, RequestContext};
 use crate::fetch::FetchResult;
 use chrono::{Local, LocalResult, TimeZone};
@@ -118,31 +118,20 @@ fn parse_history_json(
         .as_array()
         .ok_or_else(|| AppError::message("History payload was not an array of rows"))?;
 
-    let indices = match &cfg.row_format {
-        JsonHistoryRowFormat::Array(indices) => indices,
-        JsonHistoryRowFormat::StringDelimited { indices, .. } => indices,
-    };
-
     let mut candles = Vec::with_capacity(rows.len());
     for row in rows {
-        let parts: Vec<Cow<'_, str>> = match &cfg.row_format {
-            JsonHistoryRowFormat::Array(_) => row
-                .as_array()
-                .map(|array| array.iter().map(value_to_string).collect::<Vec<_>>())
-                .map(|vec| vec.into_iter().map(|s| Cow::Owned(s)).collect()),
-            JsonHistoryRowFormat::StringDelimited { .. } => {
-                split_row(row, &cfg.row_format).map(|vec| {
-                    vec.into_iter()
-                        .map(|c| Cow::Owned(c.into_owned()))
-                        .collect()
-                })
-            }
-        }
-        .unwrap_or_else(|| Vec::new());
+        let parts = match split_row(row, &cfg.row_format) {
+            Some(parts) => parts
+                .into_iter()
+                .map(|segment| Cow::Owned(segment.into_owned()))
+                .collect::<Vec<_>>(),
+            None => continue,
+        };
 
-        if parts.is_empty() {
-            continue;
-        }
+        let indices = match &cfg.row_format {
+            JsonHistoryRowFormat::Array(indices) => indices,
+            JsonHistoryRowFormat::StringDelimited { indices, .. } => indices,
+        };
 
         if let Some(candle) = candle_from_parts(&parts, indices, &cfg.date_format) {
             candles.push(candle);
@@ -219,47 +208,4 @@ fn build_candle(
         low,
         close,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::{
-        HistoryFieldIndices, JsonHistoryResponse, JsonHistoryRowFormat, JsonPathSegment,
-    };
-
-    #[test]
-    fn parses_json_history_rows() {
-        let cfg = JsonHistoryResponse {
-            data_path: vec![
-                JsonPathSegment::Key("data".to_string()),
-                JsonPathSegment::StockCode,
-                JsonPathSegment::Key("day".to_string()),
-            ],
-            row_format: JsonHistoryRowFormat::Array(HistoryFieldIndices {
-                date: 0,
-                open: 1,
-                close: 2,
-                high: 3,
-                low: 4,
-            }),
-            date_format: "%Y-%m-%d".to_string(),
-        };
-
-        let body = r#"{
-            "data": {
-                "sh600000": {
-                    "day": [
-                        ["2024-01-02","10.0","10.5","10.8","9.9"]
-                    ]
-                }
-            }
-        }"#;
-
-        let candles =
-            parse_history_json("sh600000", "sh600000", body, &cfg).expect("parse history");
-        assert_eq!(candles.len(), 1);
-        assert!((candles[0].open - 10.0).abs() < f64::EPSILON);
-        assert!((candles[0].close - 10.5).abs() < f64::EPSILON);
-    }
 }

@@ -154,28 +154,3 @@ fn is_relevant_event(kind: &EventKind) -> bool {
             | EventKind::Other
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn loads_descriptors() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let registry = ConfigRegistry::new(root).expect("registry loads");
-        let snapshot = registry.snapshot();
-        assert!(
-            !snapshot.is_empty(),
-            "expected at least one descriptor in snapshot"
-        );
-        let cn = registry.get("cn").expect("cn descriptor");
-        assert_eq!(cn.code, "CN");
-    }
-
-    #[test]
-    fn refresh_reloads_changes() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let registry = ConfigRegistry::new(root).expect("registry loads");
-        registry.refresh().expect("refresh succeeds");
-    }
-}

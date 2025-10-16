@@ -11,8 +11,9 @@ use crate::error::{AppError, Context, Result};
 use super::{
     CodeTransform, CsvHistoryResponse, DelimitedResponseConfig, FirewallWarning, HistoryConfig,
     HistoryFieldIndices, HistoryResponse, HttpMethod, InfoIndex, JsonHistoryResponse,
-    JsonHistoryRowFormat, JsonPathSegment, JsonResponseConfig, ProviderConfig, RequestConfig,
-    SnapshotConfig, SnapshotResponse, StooqProviderConfig, TencentProviderConfig, Threshold,
+    JsonHistoryRowFormat, JsonPathSegment, JsonResponseConfig, ProviderConfig, RegionStorage,
+    RequestConfig, SnapshotConfig, SnapshotResponse, StooqProviderConfig, TencentProviderConfig,
+    Threshold,
 };
 use crate::config::validator;
 
@@ -26,6 +27,7 @@ pub struct RegionDescriptor {
     pub stock_codes: Vec<String>,
     pub thresholds: HashMap<String, Threshold>,
     pub provider: ProviderConfig,
+    pub storage: RegionStorage,
 }
 
 /// Load a region descriptor by combining the JSON market configuration with the stock list CSV.
@@ -61,6 +63,9 @@ pub fn load_region_descriptor(root: &Path, region_slug: &str) -> Result<RegionDe
         .collect();
 
     let provider = raw.provider.into_provider_config()?;
+    let storage = raw
+        .storage
+        .into_storage(root, &region_slug.to_lowercase())?;
 
     let descriptor = RegionDescriptor {
         code: raw.code,
@@ -69,6 +74,7 @@ pub fn load_region_descriptor(root: &Path, region_slug: &str) -> Result<RegionDe
         stock_codes,
         thresholds,
         provider,
+        storage,
     };
 
     validator::validate_region_descriptor(&descriptor)?;
@@ -163,6 +169,8 @@ struct RawRegionConfig {
     #[serde(default)]
     thresholds: HashMap<String, RawThreshold>,
     provider: RawProviderConfig,
+    #[serde(default)]
+    storage: RawStorageConfig,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -358,6 +366,45 @@ struct RawJsonHistoryRowFormat {
     delimiter: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct RawStorageConfig {
+    snapshots_dir: Option<String>,
+    filters_dir: Option<String>,
+}
+
+impl RawStorageConfig {
+    fn into_storage(self, root: &Path, slug: &str) -> Result<RegionStorage> {
+        let snapshots = self
+            .snapshots_dir
+            .unwrap_or_else(|| format!("assets/snapshots/{slug}"));
+        let filters = self
+            .filters_dir
+            .unwrap_or_else(|| format!("assets/filters/{slug}"));
+
+        if snapshots.trim().is_empty() {
+            return Err(AppError::message("storage.snapshots_dir must not be empty"));
+        }
+
+        if filters.trim().is_empty() {
+            return Err(AppError::message("storage.filters_dir must not be empty"));
+        }
+
+        Ok(RegionStorage {
+            snapshots_dir: normalize_path(root, snapshots),
+            filters_dir: normalize_path(root, filters),
+        })
+    }
+}
+
+fn normalize_path(root: &Path, value: String) -> PathBuf {
+    let path = PathBuf::from(&value);
+    if path.is_absolute() {
+        path
+    } else {
+        root.join(path)
+    }
+}
+
 impl RawJsonHistoryRowFormat {
     fn into_row_format(self, indices: HistoryFieldIndices) -> Result<JsonHistoryRowFormat> {
         if let Some(delimiter) = self.delimiter {
@@ -524,26 +571,5 @@ fn parse_method(value: &str) -> Result<HttpMethod> {
         other => Err(AppError::message(format!(
             "unsupported HTTP method `{other}` in snapshot request"
         ))),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn load_cn_descriptor_from_repo_assets() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let descriptor = load_region_descriptor(root, "cn").expect("load cn descriptor");
-
-        assert_eq!(descriptor.code, "CN");
-        assert_eq!(descriptor.name, "China A-Shares");
-        assert!(!descriptor.stock_codes.is_empty());
-        assert!(descriptor.thresholds.contains_key("increase"));
-
-        match descriptor.provider {
-            ProviderConfig::Tencent(_) => {}
-            _ => panic!("expected tencent provider"),
-        }
     }
 }

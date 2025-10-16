@@ -1,16 +1,9 @@
-mod app;
-mod config;
-mod error;
-mod fetch;
-mod records;
-mod ui;
-mod utils;
-
 use std::env;
 
-use crate::error::{AppError, Result};
 use env_logger::Env;
 use log::{info, LevelFilter};
+use stock_cli::app;
+use stock_cli::error::{AppError, Result};
 
 #[derive(Debug, Clone)]
 struct CliOptions {

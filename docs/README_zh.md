@@ -19,7 +19,7 @@ Stock CLI 是一个专注中国 A 股的终端行情助手。它调用腾讯行�
 
 ## 界面使用指南
 - **主菜单条目**
-  - `Show Filtered`：查看符合阈值的股票列表。`s` 切换排序列，`d` 切换升/降序，Enter 展开蜡烛图，`←/→` 切换时间范围。
+  - `Show Filtered`：查看符合阈值的股票列表。`s` 切换排序列，`d` 切换升/降序，Enter 展开蜡烛图。
   - `Filters`：编辑上下限、保存或加载阈值预设。Tab 或方向键切换输入框，Enter 保存。
   - `Refresh Data`：抓取最新行情并写入 CSV。
   - `Load CSV`：从 `assets/snapshots/` 选择历史快照回放。
@@ -39,4 +39,5 @@ Stock CLI 是一个专注中国 A 股的终端行情助手。它调用腾讯行�
 - **股票清单**：`stock_code.csv`（必需）。新增区域时，请在 `assets/.markets/<region>.csv` 中维护代码表。
 - **快照文件**：`assets/snapshots/<region>/`。
 - **阈值预设**：`assets/filters/<region>/`。
-- **扩展新市场**：在 `src/config/` 下新增配置模块，并在 `Config::builtin` 中注册，即可复用现有抓取与 UI 流程。
+- **扩展新市场**：复制 `docs/examples/sample_region.json` 为 `assets/configs/<region>.json`，按格式完善接口/阈值，再准备 `assets/.markets/<region>.csv`，重新加载市场即可生效。
+- **新增市场示例**：参考 `docs/examples/sample_region.json`，复制为 `assets/configs/<地区>.json`，并同时提供 `assets/.markets/<地区>.csv` 即可。示例展示了自定义存储目录、快照/历史接口模板以及 JSON 响应字段映射。

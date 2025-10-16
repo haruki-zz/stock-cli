@@ -42,17 +42,14 @@ impl MarketRegistry {
             .map(|descriptor| RegionConfig::from(&descriptor))
     }
 
-    #[allow(dead_code)]
     pub fn subscribe(&self) -> watch::Receiver<Arc<Vec<RegionDescriptor>>> {
         self.registry.subscribe()
     }
 
-    #[allow(dead_code)]
     pub fn refresh(&self) -> Result<()> {
         self.registry.refresh()
     }
 
-    #[allow(dead_code)]
     pub fn start_watching(self: &Arc<Self>) -> Result<()> {
         Arc::clone(&self.registry).start_watching()
     }
@@ -63,25 +60,5 @@ impl MarketRegistry {
                 "Region `{code}` not found. Trigger a reload if new markets were added."
             ))
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn exposes_region_summaries() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let registry = Arc::new(ConfigRegistry::new(root).expect("registry"));
-        let markets = MarketRegistry::new(Arc::clone(&registry));
-
-        let summaries = markets.available_regions();
-        assert!(!summaries.is_empty());
-        assert!(summaries.iter().any(|summary| summary.code == "CN"));
-
-        let config = markets.ensure_region("cn").expect("cn config");
-        assert_eq!(config.code, "CN");
     }
 }

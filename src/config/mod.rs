@@ -6,8 +6,6 @@ pub mod loader;
 pub mod registry;
 pub mod validator;
 
-mod cn;
-
 #[derive(Debug, Clone)]
 pub struct InfoIndex {
     pub index: usize,
@@ -147,6 +145,12 @@ pub struct HistoryFieldIndices {
 }
 
 #[derive(Debug, Clone)]
+pub struct RegionStorage {
+    pub snapshots_dir: PathBuf,
+    pub filters_dir: PathBuf,
+}
+
+#[derive(Debug, Clone)]
 pub struct TencentProviderConfig {
     pub snapshot: SnapshotConfig,
     pub history: HistoryConfig,
@@ -188,6 +192,7 @@ pub struct RegionConfig {
     pub stock_code_file: String,
     pub thresholds: HashMap<String, Threshold>,
     pub provider: ProviderConfig,
+    pub storage: RegionStorage,
 }
 
 #[derive(Debug, Clone)]
@@ -206,36 +211,15 @@ impl Config {
     #[allow(dead_code)]
     pub fn builtin() -> Self {
         let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        match load_region_descriptors(&root) {
-            Ok(descriptors) if !descriptors.is_empty() => {
-                let regions = descriptors
-                    .iter()
-                    .map(|descriptor| {
-                        let region: RegionConfig = descriptor.into();
-                        (region.code.clone(), region)
-                    })
-                    .collect();
-                Self { regions }
-            }
-            Ok(_) => {
-                log::warn!(
-                    "No region descriptors found; falling back to built-in CN configuration"
-                );
-                let region = cn::region();
-                let mut regions = HashMap::new();
-                regions.insert(region.code.clone(), region);
-                Self { regions }
-            }
-            Err(err) => {
-                log::warn!(
-                    "Failed to load region descriptors from assets/configs: {err}. Falling back to built-in CN configuration."
-                );
-                let region = cn::region();
-                let mut regions = HashMap::new();
-                regions.insert(region.code.clone(), region);
-                Self { regions }
-            }
-        }
+        let descriptors = load_region_descriptors(&root).unwrap_or_default();
+        let regions = descriptors
+            .iter()
+            .map(|descriptor| {
+                let region: RegionConfig = descriptor.into();
+                (region.code.clone(), region)
+            })
+            .collect();
+        Self { regions }
     }
 
     /// Retrieve the full region configuration, including disabled entries.
@@ -260,6 +244,7 @@ impl From<&RegionDescriptor> for RegionConfig {
             stock_code_file: descriptor.stock_list_file.to_string_lossy().to_string(),
             thresholds: descriptor.thresholds.clone(),
             provider: descriptor.provider.clone(),
+            storage: descriptor.storage.clone(),
         }
     }
 }

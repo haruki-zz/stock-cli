@@ -2,13 +2,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::app::{market_registry::MarketRegistry, state::RegionState};
-use crate::config::RegionConfig;
+use crate::config::{RegionConfig, RegionDescriptor};
 use crate::error::{AppError, Result};
 use crate::ui::{
     run_csv_picker, run_fetch_progress, run_filters_menu, run_main_menu, run_market_picker,
     run_preset_picker, run_results_table, run_thresholds_editor, FilterMenuAction, MenuAction,
 };
 use crate::utils::sanitize_preset_name;
+use tokio::sync::watch;
 
 /// Coordinates configuration, region state, and TUI flows.
 pub struct AppController {
@@ -31,12 +32,17 @@ impl AppController {
     }
 
     pub async fn run(self) -> Result<()> {
-        let mut current_region = match self.select_initial_region()? {
+        let mut updates = self.markets.subscribe();
+        let mut current_region = match self.select_initial_region(&mut updates).await? {
             Some(code) => code,
             None => return Ok(()),
         };
 
         loop {
+            while updates.has_changed().unwrap_or(false) {
+                let _ = updates.borrow();
+            }
+
             let region_config = self.region_config(&current_region)?;
 
             let mut region_state = RegionState::new(region_config.clone()).await?;
@@ -52,11 +58,7 @@ impl AppController {
             }
 
             match self
-                .drive_region(
-                    &mut region_state,
-                    self.markets.available_regions().len() > 1,
-                    &current_region,
-                )
+                .drive_region(&mut region_state, &current_region)
                 .await?
             {
                 ControllerOutcome::Exit => return Ok(()),
@@ -70,10 +72,10 @@ impl AppController {
     async fn drive_region(
         &self,
         region_state: &mut RegionState,
-        allow_region_switch: bool,
         current_region: &str,
     ) -> Result<ControllerOutcome> {
         loop {
+            let allow_region_switch = self.markets.available_regions().len() > 1;
             match run_main_menu(
                 region_state.loaded_file(),
                 allow_region_switch,
@@ -266,27 +268,34 @@ impl AppController {
             .collect()
     }
 
-    fn select_initial_region(&self) -> Result<Option<String>> {
-        let summaries = self.markets.available_regions();
-        if summaries.is_empty() {
-            return Err(AppError::message(
-                "No regions configured in the application.",
-            ));
-        }
+    async fn select_initial_region(
+        &self,
+        updates: &mut watch::Receiver<Arc<Vec<RegionDescriptor>>>,
+    ) -> Result<Option<String>> {
+        loop {
+            let summaries = self.markets.available_regions();
+            if summaries.is_empty() {
+                updates
+                    .changed()
+                    .await
+                    .map_err(|_| AppError::message("Configuration registry was closed."))?;
+                continue;
+            }
 
-        if summaries.len() == 1 {
-            return Ok(Some(summaries[0].code.clone()));
-        }
+            if summaries.len() == 1 {
+                return Ok(Some(summaries[0].code.clone()));
+            }
 
-        let options: Vec<(String, String)> = summaries
-            .into_iter()
-            .map(|summary| (summary.code, summary.name))
-            .collect();
+            let options: Vec<(String, String)> = summaries
+                .into_iter()
+                .map(|summary| (summary.code, summary.name))
+                .collect();
 
-        match run_market_picker(&options) {
-            Ok(code) => Ok(Some(code)),
-            Err(AppError::Cancelled) => Ok(None),
-            Err(err) => Err(err),
+            match run_market_picker(&options) {
+                Ok(code) => return Ok(Some(code)),
+                Err(AppError::Cancelled) => return Ok(None),
+                Err(err) => return Err(err),
+            }
         }
     }
 

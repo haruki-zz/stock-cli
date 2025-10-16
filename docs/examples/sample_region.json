@@ -1,0 +1,70 @@
+{
+  "code": "sample",
+  "name": "Sample Equity Market",
+  "stock_list": {
+    "file": "assets/.markets/sample.csv"
+  },
+  "thresholds": {
+    "increase": { "lower": -5.0, "upper": 10.0, "enabled": true },
+    "turnOver": { "lower": 0.0, "upper": 50.0, "enabled": false }
+  },
+  "storage": {
+    "snapshots_dir": "assets/snapshots/sample",
+    "filters_dir": "assets/filters/sample"
+  },
+  "provider": {
+    "type": "tencent",
+    "snapshot": {
+      "request": {
+        "method": "GET",
+        "url_template": "https://snapshot.example.com/api?region={region}&symbol={symbol}",
+        "headers": {
+          "Accept": "application/json",
+          "User-Agent": "stock-cli-sample/1.0"
+        },
+        "code_transform": "default"
+      },
+      "response": {
+        "type": "json_path",
+        "path": ["data", "quotes", "{symbol}"]
+      },
+      "firewall_warning": "blocked",
+      "info_indices": {
+        "stockName": 0,
+        "stockCode": 1,
+        "curr": 2,
+        "prevClosed": 3,
+        "open": 4,
+        "increase": 5,
+        "highest": 6,
+        "lowest": 7,
+        "turnOver": 8,
+        "amp": 9,
+        "tm": 10
+      }
+    },
+    "history": {
+      "request": {
+        "method": "GET",
+        "url_template": "https://history.example.com/{region_lower}/{symbol}?days={record_days}",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "code_transform": "default"
+      },
+      "response": {
+        "type": "json_rows",
+        "path": ["data", "{symbol}", "daily"],
+        "date_format": "%Y-%m-%d",
+        "columns": {
+          "date": 0,
+          "open": 1,
+          "close": 2,
+          "high": 3,
+          "low": 4
+        }
+      },
+      "limit": 120
+    }
+  }
+}

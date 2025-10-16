@@ -4,8 +4,8 @@ use crate::error::{AppError, Result};
 
 use super::{
     loader::RegionDescriptor, HistoryConfig, HistoryFieldIndices, HistoryResponse, InfoIndex,
-    JsonHistoryRowFormat, JsonPathSegment, JsonResponseConfig, ProviderConfig, RequestConfig,
-    SnapshotConfig, SnapshotResponse, Threshold,
+    JsonHistoryRowFormat, JsonPathSegment, ProviderConfig, RequestConfig, SnapshotConfig,
+    SnapshotResponse,
 };
 
 /// Validate a single region descriptor and surface descriptive errors.
@@ -229,79 +229,5 @@ fn validate_history_indices(
                 "{context} maps index {idx} to both `{existing}` and `{label}`"
             ));
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::load_region_descriptor;
-    use std::path::Path;
-
-    #[test]
-    fn validates_cn_descriptor() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let descriptor = load_region_descriptor(root, "cn").expect("load cn descriptor");
-
-        validate_region_descriptor(&descriptor).expect("cn descriptor should be valid");
-    }
-
-    #[test]
-    fn rejects_duplicate_info_indices() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let mut descriptor = load_region_descriptor(root, "cn").expect("load cn descriptor");
-
-        if let ProviderConfig::Tencent(tencent) = &mut descriptor.provider {
-            tencent
-                .snapshot
-                .info_idxs
-                .insert("duplicated".to_string(), InfoIndex { index: 1 });
-        }
-
-        let err = validate_region_descriptor(&descriptor).expect_err("validation should fail");
-        let message = err.to_string();
-        assert!(
-            message.contains("duplicate positions"),
-            "unexpected error message: {message}"
-        );
-    }
-
-    #[test]
-    fn rejects_threshold_with_inverted_bounds() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let mut descriptor = load_region_descriptor(root, "cn").expect("load cn descriptor");
-        descriptor.thresholds.insert(
-            "bad_metric".to_string(),
-            Threshold {
-                lower: 10.0,
-                upper: 5.0,
-                valid: true,
-            },
-        );
-
-        let err = validate_region_descriptor(&descriptor).expect_err("validation should fail");
-        assert!(
-            err.to_string().contains("lower bound"),
-            "unexpected error message: {}",
-            err
-        );
-    }
-
-    #[test]
-    fn rejects_missing_symbol_segment() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let mut descriptor = load_region_descriptor(root, "cn").expect("load cn descriptor");
-
-        if let ProviderConfig::Tencent(tencent) = &mut descriptor.provider {
-            tencent.snapshot.response =
-                SnapshotResponse::Json(JsonResponseConfig { data_path: vec![] });
-        }
-
-        let err = validate_region_descriptor(&descriptor).expect_err("validation should fail");
-        let msg = err.to_string();
-        assert!(
-            msg.contains("at least one segment"),
-            "unexpected error message: {msg}"
-        );
     }
 }

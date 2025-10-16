@@ -2,7 +2,7 @@ use crate::error::Result;
 
 mod decode;
 pub mod history;
-mod request;
+pub mod request;
 pub mod snapshots;
 
 pub use history::{spawn_history_fetch, Candle, HistoryReceiver};

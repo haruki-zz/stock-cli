@@ -176,6 +176,6 @@ src/
 
 ## 扩展新市场的步骤
 1. 在 `assets/.markets/` 复制示例 CSV，填入目标市场的代码、名称等字段。
-2. 在 `assets/configs/` 新建 `<region>.json`，参照示例指定快照与历史接口、字段映射、默认阈值。
+2. 在 `assets/configs/` 新建 `<region>.json`，可以参考 `docs/examples/sample_region.json`，完成快照/历史接口、字段映射、默认阈值等配置。
 3. 重新启动程序或在 UI 内触发“重新加载市场”动作；若配置合法，会自动出现在市场选择列表中。
 4. 无需修改任何 Rust 代码，即可完成新市场接入。

@@ -288,7 +288,7 @@ pub fn render_chart_panel(
                 let candles = draw_series.clone();
                 let canvas = Canvas::default()
                     .block(Block::default().borders(Borders::ALL).title(format!(
-                        "{} — {} | {}  (Enter/←/→ cycle • X close)",
+                        "{} — {} | {}  (←/→/h/l cycle • X close)",
                         stock.stock_code, label, timeframe_legend
                     )))
                     .marker(Marker::HalfBlock)

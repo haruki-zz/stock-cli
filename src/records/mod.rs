@@ -21,10 +21,10 @@ pub struct Records {
 
 impl Records {
     pub fn for_region(region: &RegionConfig) -> Self {
-        let lower = region.code.to_lowercase();
-        let snapshots_dir = PathBuf::from(format!("assets/snapshots/{}", lower));
-        let presets_dir = PathBuf::from(format!("assets/filters/{}", lower));
-        Self::with_dirs(snapshots_dir, presets_dir)
+        Self::with_dirs(
+            region.storage.snapshots_dir.clone(),
+            region.storage.filters_dir.clone(),
+        )
     }
 
     pub fn with_dirs<S, P>(snapshots_dir: S, presets_dir: P) -> Self

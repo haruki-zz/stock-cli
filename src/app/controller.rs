@@ -1,8 +1,9 @@
 use std::path::Path;
+use std::sync::Arc;
 
-use crate::app::state::RegionState;
-use crate::config::Config;
-use crate::error::{AppError, Context, Result};
+use crate::app::{market_registry::MarketRegistry, state::RegionState};
+use crate::config::RegionConfig;
+use crate::error::{AppError, Result};
 use crate::ui::{
     run_csv_picker, run_fetch_progress, run_filters_menu, run_main_menu, run_market_picker,
     run_preset_picker, run_results_table, run_thresholds_editor, FilterMenuAction, MenuAction,
@@ -11,7 +12,7 @@ use crate::utils::sanitize_preset_name;
 
 /// Coordinates configuration, region state, and TUI flows.
 pub struct AppController {
-    config: Config,
+    markets: Arc<MarketRegistry>,
 }
 
 enum ControllerOutcome {
@@ -20,39 +21,23 @@ enum ControllerOutcome {
 }
 
 impl AppController {
-    pub fn new(config: Config) -> Result<Self> {
-        if config.available_regions().is_empty() {
+    pub fn new(markets: Arc<MarketRegistry>) -> Result<Self> {
+        if markets.available_regions().is_empty() {
             return Err(AppError::message(
                 "No regions configured in the application.",
             ));
         }
-        Ok(Self { config })
+        Ok(Self { markets })
     }
 
     pub async fn run(self) -> Result<()> {
-        let regions = self.config.available_regions();
-        let allow_region_switch = regions.len() > 1;
-
-        let mut current_region = if allow_region_switch {
-            let options = self.region_options();
-            match run_market_picker(&options) {
-                Ok(code) => code,
-                Err(AppError::Cancelled) => return Ok(()),
-                Err(err) => return Err(err),
-            }
-        } else {
-            regions
-                .get(0)
-                .map(|region| region.code.clone())
-                .context("Missing region configuration despite availability check")?
+        let mut current_region = match self.select_initial_region()? {
+            Some(code) => code,
+            None => return Ok(()),
         };
 
         loop {
-            let region_config = self
-                .config
-                .get_region_config(&current_region)
-                .context("Region not found in config")?
-                .clone();
+            let region_config = self.region_config(&current_region)?;
 
             let mut region_state = RegionState::new(region_config.clone()).await?;
             self.load_previous_snapshot(&mut region_state);
@@ -67,7 +52,11 @@ impl AppController {
             }
 
             match self
-                .drive_region(&mut region_state, allow_region_switch, &current_region)
+                .drive_region(
+                    &mut region_state,
+                    self.markets.available_regions().len() > 1,
+                    &current_region,
+                )
                 .await?
             {
                 ControllerOutcome::Exit => return Ok(()),
@@ -270,10 +259,38 @@ impl AppController {
     }
 
     fn region_options(&self) -> Vec<(String, String)> {
-        self.config
+        self.markets
             .available_regions()
             .into_iter()
-            .map(|region| (region.code.clone(), region.name.clone()))
+            .map(|summary| (summary.code, summary.name))
             .collect()
+    }
+
+    fn select_initial_region(&self) -> Result<Option<String>> {
+        let summaries = self.markets.available_regions();
+        if summaries.is_empty() {
+            return Err(AppError::message(
+                "No regions configured in the application.",
+            ));
+        }
+
+        if summaries.len() == 1 {
+            return Ok(Some(summaries[0].code.clone()));
+        }
+
+        let options: Vec<(String, String)> = summaries
+            .into_iter()
+            .map(|summary| (summary.code, summary.name))
+            .collect();
+
+        match run_market_picker(&options) {
+            Ok(code) => Ok(Some(code)),
+            Err(AppError::Cancelled) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn region_config(&self, code: &str) -> Result<RegionConfig> {
+        self.markets.ensure_region(code)
     }
 }

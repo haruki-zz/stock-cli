@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub mod loader;
+pub mod registry;
+pub mod validator;
 
 mod cn;
 
@@ -151,14 +156,46 @@ pub struct Config {
     pub regions: HashMap<String, RegionConfig>,
 }
 
+#[allow(unused_imports)]
+pub use loader::{load_region_descriptor, load_region_descriptors, RegionDescriptor};
+#[allow(unused_imports)]
+pub use registry::ConfigRegistry;
+#[allow(unused_imports)]
+pub use validator::{validate_region_descriptor, validate_region_descriptors};
+
 impl Config {
     pub fn builtin() -> Self {
-        let regions = vec![cn::region()]
-            .into_iter()
-            .map(|region| (region.code.clone(), region))
-            .collect();
-
-        Self { regions }
+        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        match load_region_descriptors(&root) {
+            Ok(descriptors) if !descriptors.is_empty() => {
+                let regions = descriptors
+                    .iter()
+                    .map(|descriptor| {
+                        let region: RegionConfig = descriptor.into();
+                        (region.code.clone(), region)
+                    })
+                    .collect();
+                Self { regions }
+            }
+            Ok(_) => {
+                log::warn!(
+                    "No region descriptors found; falling back to built-in CN configuration"
+                );
+                let region = cn::region();
+                let mut regions = HashMap::new();
+                regions.insert(region.code.clone(), region);
+                Self { regions }
+            }
+            Err(err) => {
+                log::warn!(
+                    "Failed to load region descriptors from assets/configs: {err}. Falling back to built-in CN configuration."
+                );
+                let region = cn::region();
+                let mut regions = HashMap::new();
+                regions.insert(region.code.clone(), region);
+                Self { regions }
+            }
+        }
     }
 
     /// Retrieve the full region configuration, including disabled entries.
@@ -166,9 +203,22 @@ impl Config {
         self.regions.get(region_code)
     }
 
+    #[allow(dead_code)]
     pub fn available_regions(&self) -> Vec<&RegionConfig> {
         let mut regions: Vec<&RegionConfig> = self.regions.values().collect();
         regions.sort_by(|a, b| a.code.cmp(&b.code));
         regions
+    }
+}
+
+impl From<&RegionDescriptor> for RegionConfig {
+    fn from(descriptor: &RegionDescriptor) -> Self {
+        RegionConfig {
+            code: descriptor.code.clone(),
+            name: descriptor.name.clone(),
+            stock_code_file: descriptor.stock_list_file.to_string_lossy().to_string(),
+            thresholds: descriptor.thresholds.clone(),
+            provider: descriptor.provider.clone(),
+        }
     }
 }

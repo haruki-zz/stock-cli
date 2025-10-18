@@ -49,12 +49,12 @@ Because controllers and UI components only touch the `RegionDescriptor`, you can
 Keep runtime outputs under `assets/snapshots/` and `assets/filters/` so that version control stays clean.
 
 ## Build & Deploy
-- Install the current stable Rust toolchain (`rustup toolchain install stable`).
-- Build in release mode for deployment: `cargo build --release` (binary at `target/release/stock-cli`).
-- During development, run `cargo run` to start the TUI with debug logs.
-- Recommended checks before distributing:
-  - `cargo fmt`
-  - `cargo clippy -- -D warnings`
-  - `cargo test`
-- To package for other machines, copy the compiled binary together with the `assets/` directory so the region descriptors, snapshots, and presets remain available.
-- On macOS, run `./deploy.sh` (or `./deploy.sh /path/to/stock-cli`) after unpacking the release bundle to remove the Gatekeeper quarantine flag (`xattr -d -r com.apple.quarantine`), enabling the binary to launch normally.
+- **Option 1 – Build from source** (requires local Rust toolchain)
+  - Install the current stable toolchain: `rustup toolchain install stable`.
+  - Build in release mode: `cargo build --release` (binary at `target/release/stock-cli`).
+  - During development, run `cargo run` to start the TUI with debug logs.
+  - Before distributing, run `cargo fmt`, `cargo clippy -- -D warnings`, and `cargo test`.
+  - When sharing your build, bundle the binary alongside the `assets/` directory so descriptors, snapshots, and presets remain available.
+- **Option 2 – Use the packaged release** (no Rust environment required)
+  - Download the prebuilt macOS archive, unpack it, and run `./deploy.sh` (or `./deploy.sh /path/to/stock-cli`) once. The script executes `xattr -d -r com.apple.quarantine` on the binary so Gatekeeper allows it to launch.
+  - After quarantine removal, run the bundled `stock-cli` directly.

@@ -49,12 +49,12 @@ Stock CLI 的核心是区域描述符，只要准备好 CSV 与 JSON，即可将
 运行时写入请保持在 `assets/snapshots/` 与 `assets/filters/` 下，避免污染版本库。
 
 ## 构建与部署
-- 安装最新稳定版 Rust 工具链（`rustup toolchain install stable`）。
-- 发布构建：`cargo build --release`（生成的可执行文件位于 `target/release/stock-cli`）。
-- 开发调试可直接运行 `cargo run`，并查看终端日志。
-- 发布前建议执行：
-  - `cargo fmt`
-  - `cargo clippy -- -D warnings`
-  - `cargo test`
-- 将程序部署到其他机器时，请同时拷贝编译产物与 `assets/` 目录，以保留市场配置、快照及筛选预设。
-- 在 macOS 上解压发行包后，执行 `./deploy.sh`（或 `./deploy.sh /路径/stock-cli`）即可运行 `xattr -d -r com.apple.quarantine` 去除隔离标记，之后可直接双击启动应用。
+- **方案一：本地源码编译**（需要自备 Rust 环境）
+  - 安装稳定版工具链：`rustup toolchain install stable`。
+  - 执行 `cargo build --release` 生成可执行文件（位于 `target/release/stock-cli`）。
+  - 开发调试阶段可使用 `cargo run`，实时查看终端日志。
+  - 发布前建议运行 `cargo fmt`、`cargo clippy -- -D warnings` 与 `cargo test`。
+  - 分发给其他机器时，请携带编译好的二进制与 `assets/` 目录，确保描述符、快照及预设可用。
+- **方案二：使用提供的发行压缩包**（无需本地 Rust 环境）
+  - 下载预编译的 macOS 压缩包，解压后运行一次 `./deploy.sh`（也可以 `./deploy.sh /路径/stock-cli`）。脚本会执行 `xattr -d -r com.apple.quarantine` 清除隔离标记。
+  - 隔离消除后即可直接双击或终端运行 `stock-cli`。

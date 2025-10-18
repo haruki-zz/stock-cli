@@ -57,3 +57,4 @@ Stock CLI 的核心是区域描述符，只要准备好 CSV 与 JSON，即可将
   - `cargo clippy -- -D warnings`
   - `cargo test`
 - 将程序部署到其他机器时，请同时拷贝编译产物与 `assets/` 目录，以保留市场配置、快照及筛选预设。
+- 在 macOS 上解压发行包后，执行 `./deploy.sh`（或 `./deploy.sh /路径/stock-cli`）即可运行 `xattr -d -r com.apple.quarantine` 去除隔离标记，之后可直接双击启动应用。

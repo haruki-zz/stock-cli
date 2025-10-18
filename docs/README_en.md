@@ -57,3 +57,4 @@ Keep runtime outputs under `assets/snapshots/` and `assets/filters/` so that ver
   - `cargo clippy -- -D warnings`
   - `cargo test`
 - To package for other machines, copy the compiled binary together with the `assets/` directory so the region descriptors, snapshots, and presets remain available.
+- On macOS, run `./deploy.sh` (or `./deploy.sh /path/to/stock-cli`) after unpacking the release bundle to remove the Gatekeeper quarantine flag (`xattr -d -r com.apple.quarantine`), enabling the binary to launch normally.

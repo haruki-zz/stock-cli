@@ -1,43 +1,59 @@
 # Stock CLI
 
-Stock CLI 是一个专注中国 A 股的终端行情助手。它调用腾讯行情接口抓取实时数据，按时间戳写入 CSV 快照，并依托 Ratatui 构建的多界面 TUI 提供筛选、排序与蜡烛图联动浏览。当前聚焦中国市场，同时保留未来引入其他区域的扩展点。
+Stock CLI 是一个基于 Ratatui 构建的终端行情与选股工具，目前默认仅支持沪深 A 股（上海、深圳）。应用通过声明式配置驱动，后续扩展新市场时无需修改 Rust 代码。
 
-![应用主菜单](../img/main_menu.png)
+![筛选列表与 K 线](../img/list_and_K-line.png)
 
-## 核心能力
-- **实时行情**：读取 `stock_code.csv` 中的股票代码，批量请求现价、涨跌幅、幅度、换手率等指标。
-- **条件筛选**：为每个指标设置阈值范围，支持保存/加载本地预设，快速复用常用策略。
-- **历史走势**：为当前选中股票抓取最长 420 天的日线 K 线，在结果页内切换多种时间窗口。
-- **快照管理**：每次抓取都会在 `assets/snapshots/cn/` 下生成带时间戳的 CSV，方便回放以往数据。
+## 当前覆盖范围
+- 默认区域 `CN` 读取 `assets/.markets/cn.csv`，其中同时包含深交所（SZ）与上交所（SH）的股票列表，其他市场默认不启用。
+- 区域元数据、网络请求模板以及默认阈值定义在 `assets/configs/cn.json` 中。程序启动时仅依赖该描述符加载市场信息，更新 CSV 或 JSON 即可刷新可用股票。
 
-## 快速上手
-- **准备工具链**：安装稳定版 Rust（含 `cargo`）。
-- **获取代码**：`git clone <repo-url> && cd stock-cli`
-- **编译程序**：`cargo build --release`
-- **准备股票清单**：在可执行文件同级目录放置 `stock_code.csv`（每行一个代码，仅限中国市场）。若要增加其他区域，可在 `assets/.markets/` 中新增对应 CSV 并在配置中注册。
-- **启动应用**：`./target/release/stock-cli`（开发阶段可使用 `cargo run`）。
+## 实时快照与历史数据
+- 每次执行刷新时，应用会从 `assets/.markets/<region>.csv` 遍历股票代码，批量请求实时行情，并将响应写入 `assets/snapshots/<region>/` 下按时间戳命名的 CSV。
+- 同步抓取最长一年的日线历史数据，为 K 线视图提供 OHLC 序列，并在同一会话中缓存以减少重复请求。
+- 所有字段解析和防火墙判定均由区域描述符中的 JSON 映射完成，避免在抓取逻辑中硬编码供应商细节。
 
-## 界面使用指南
-- **主菜单条目**
-  - `Show Filtered`：查看符合阈值的股票列表。`s` 切换排序列，`d` 切换升/降序，Enter 展开蜡烛图。
-  - `Filters`：编辑上下限、保存或加载阈值预设。Tab 或方向键切换输入框，Enter 保存。
-  - `Refresh Data`：抓取最新行情并写入 CSV。
-  - `Load CSV`：从 `assets/snapshots/` 选择历史快照回放。
-  - `Quit`：退出程序。（当注册多个区域时会自动出现 `Switch Market` 选项。）
-- **导航速查**
-  - 方向键或 `j/k`：移动选项
-  - `Enter`：确认
-  - `Esc`：返回
-  - `Ctrl+C`：随时退出
-- **推荐流程**
-  1. 在主菜单选择 `Refresh Data` 拉取当日行情；
-  2. 进入 `Filters` 调整筛选条件；
-  3. 在 `Show Filtered` 中浏览结果并查看联动图；
-  4. 依据需要保存预设或加载历史快照。
+## 筛选与 K 线联动
+- 区域配置预置了换手率、振幅、涨跌幅等过滤指标。在界面中选择 *Show Filtered* 时，系统会对最新快照应用当前筛选器，输出符合条件的股票清单作为选股建议。
+- 进入某个条目即可展开联动的 K 线图，默认自动在一年、半年、三个月、一个月与一周的时间范围之间切换，帮助快速对比不同周期的走势。
+- 列表支持 `s` 选择排序字段、`d` 切换升降序，方便在筛选结果中快速定位目标。
 
-## 数据布局与扩展
-- **股票清单**：`stock_code.csv`（必需）。新增区域时，请在 `assets/.markets/<region>.csv` 中维护代码表。
-- **快照文件**：`assets/snapshots/<region>/`。
-- **阈值预设**：`assets/filters/<region>/`。
-- **扩展新市场**：复制 `docs/examples/sample_region.json` 为 `assets/configs/<region>.json`，按格式完善接口/阈值，再准备 `assets/.markets/<region>.csv`，重新加载市场即可生效。
-- **新增市场示例**：参考 `docs/examples/sample_region.json`，复制为 `assets/configs/<地区>.json`，并同时提供 `assets/.markets/<地区>.csv` 即可。示例展示了自定义存储目录、快照/历史接口模板以及 JSON 响应字段映射。
+## 自定义筛选器预设
+![筛选器设置界面](../img/filter_setting.png)
+
+- *Filters* 界面展示了区域 JSON 中声明的全部指标，可调整上下限或开关后即时生效，并保存至 `assets/filters/<region>/`。
+- 预设支持命名存储与快速加载，程序会在重启后自动还原上次选中的策略，无需反复手动输入。
+
+## 扩展新的市场
+Stock CLI 的核心是区域描述符，只要准备好 CSV 与 JSON，即可将其他市场同样纳入选股流程。
+
+![区域配置概览](../img/region_config(1).png)
+![响应字段映射](../img/region_config(2).png)
+
+1. **从模板开始**：复制 `docs/examples/sample_region.json` 为 `assets/configs/<your_region>.json`，修改 `code`、`name` 与 `stock_list.file` 指向新的市场。上图展示了请求模板与结果映射之间的对应关系。
+2. **完善抓取配置**：补全 `provider.snapshot` 与 `provider.history`：
+   - 通过 `url_template` 与可选 `headers` 描述请求方式。
+   - 在 `response` 段声明 JSON 字段如何映射到统一的快照或历史表结构。
+   - 如果目标市场提供的历史长度不同，可调整 `limit` 数值。
+3. **准备股票清单**：在 `assets/.markets/<your_region>.csv` 中列出所有交易代码及描述符需要的额外列。
+4. **重新加载市场**：重启程序或在界面中触发 *Reload Markets*，新区域即可在市场选择器中出现，随即获得实时快照、历史数据与筛选器支持。
+
+由于控制器与 UI 仅和 `RegionDescriptor` 交互，你可以在程序运行期间迭代 CSV/JSON 文件，快速验证新市场的配置。
+
+## 运行时目录结构
+- 实时快照：`assets/snapshots/<region>/timestamp.csv`
+- 筛选预设：`assets/filters/<region>/*.json`
+- 市场清单：`assets/.markets/<region>.csv`
+- 区域描述符：`assets/configs/<region>.json`
+
+运行时写入请保持在 `assets/snapshots/` 与 `assets/filters/` 下，避免污染版本库。
+
+## 构建与部署
+- 安装最新稳定版 Rust 工具链（`rustup toolchain install stable`）。
+- 发布构建：`cargo build --release`（生成的可执行文件位于 `target/release/stock-cli`）。
+- 开发调试可直接运行 `cargo run`，并查看终端日志。
+- 发布前建议执行：
+  - `cargo fmt`
+  - `cargo clippy -- -D warnings`
+  - `cargo test`
+- 将程序部署到其他机器时，请同时拷贝编译产物与 `assets/` 目录，以保留市场配置、快照及筛选预设。

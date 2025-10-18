@@ -1,50 +1,59 @@
 # Stock CLI
 
-Stock CLI is a terminal-first companion for exploring the China A-share market. It grabs live quotes from Tencent, writes timestamped CSV snapshots, and drives a Ratatui UI that lets you filter, sort, and inspect interactive candlestick charts. The configuration remains extensible so additional markets can be added later.
+Stock CLI is a Ratatui-powered terminal companion for screening equity markets. It currently ships with a single descriptor for China A-shares (Shanghai & Shenzhen) and relies on declarative configuration so you can add new regions without touching Rust code.
 
-![Main menu](../img/main_menu.png)
+![Filtered list and K-line](../img/list_and_K-line.png)
 
-## What It Does
-- Fetch live market data: read stock codes from `stock_code.csv`, request real-time quotes, and surface price, turnover, amplitude, and other key metrics.
-- Filter the results: configure threshold ranges, save them as reusable presets, and reload them on demand.
-- Visualize history: pull up to 420 days of candles for the selected symbol and inspect multiple time ranges directly from the results screen.
-- Manage CSVs: every fetch emits a timestamped file under `assets/snapshots/cn/`, making it easy to revisit previous trading sessions.
+## Current Coverage
+- The bundled `CN` region points to `assets/.markets/cn.csv`, combining Shenzhen (SZ) and Shanghai (SH) listings. No other exchanges are enabled out of the box.
+- Market metadata, request templates, and default thresholds live in `assets/configs/cn.json`. The app bootstraps entirely from this descriptor at runtime, so updating the CSV or JSON is enough to refresh the universe.
 
-## Getting Started
-- Install tooling: make sure the stable Rust toolchain (with `cargo`) is available.
-- Clone the repo: `git clone <repo-url> && cd stock-cli`
-- Build the binary: `cargo build --release`
-- Provide stock codes: place `stock_code.csv` alongside the executable (one symbol per line for the China market). To add future markets, drop a CSV into `assets/.markets/` and register it in the configuration.
-- Launch the app: `./target/release/stock-cli` (or `cargo run` while developing).
+## Snapshot & History Capture
+- Whenever you refresh data, Stock CLI reads the active region list from `assets/.markets/<region>.csv` and requests live snapshots for every symbol. Responses are persisted as timestamped CSVs under `assets/snapshots/<region>/`.
+- The same process pulls up to a full year of historical candles for each instrument. These daily OHLC rows feed the K-line charts and are cached to avoid redundant calls during a session.
+- Snapshot pipelines understand provider-specific quirks (including Tencent firewall warnings) by following the JSON mapping declared in each region descriptor.
 
-## Using The TUI
-- Main menu
-  - `Show Filtered` – browse stocks that pass the active thresholds; use `s` to change the sort column, `d` to toggle direction, and Enter to open the inline chart.
-  - `Filters` – edit lower/upper bounds, save presets, or load existing ones. Within the editor, Tab or the arrow keys jump between fields; Enter saves the change.
-  - `Refresh Data` – fetch the latest snapshot and persist it to disk.
-  - `Load CSV` – pick a historical snapshot from `assets/snapshots/` to explore.
-  - `Quit` – exit the program. (When more than one region is configured, a `Switch Market` option appears automatically.)
-- Navigation cheatsheet
-  - Arrow keys or `j/k` move the selection.
-  - `Enter` confirms, `Esc` steps back, `Ctrl+C` aborts immediately.
-- Suggested flow
-  1. Start with `Refresh Data` to capture current quotes.
-  2. Adjust filters until the result list matches your criteria.
-  3. Open `Show Filtered`, scan the table, and inspect the inline charts.
-  4. Save thresholds or load prior CSV snapshots as needed.
+## Screening & K-Line Exploration
+- Region descriptors define metric thresholds such as turnover, amplitude, and price change. When you choose *Show Filtered*, the app applies the active filter to the latest snapshot, surfaces matching tickers, and offers them as stock-picking suggestions.
+- Selecting a row opens the inline K-line canvas. The chart automatically cycles through one year, six months, three months, one month, and one week windows so you can compare recent momentum without leaving the list.
+- Sorting (`s`) and direction toggles (`d`) let you prioritize symbols that meet your strategy while the chart updates in place alongside the table.
 
-## Data Layout & Extensibility
-- Stock universe: `stock_code.csv` (required). New markets belong in `assets/.markets/<region>.csv`.
-- Snapshots: stored in `assets/snapshots/<region>/`.
-- Filter presets: stored in `assets/filters/<region>/`.
-- Adding another region: copy `docs/examples/sample_region.json` to `assets/configs/<code>.json`, adjust the endpoints/columns, and provide `assets/.markets/<code>.csv`. Restart the app or use the market reload action to pick it up.
+## Custom Filter Presets
+![Filter settings](../img/filter_setting.png)
 
-## Adding a New Market (Example)
+- The *Filters* screen exposes every threshold declared in the region JSON, allows you to enable or disable metrics, and saves changes under `assets/filters/<region>/`.
+- Presets can be saved with custom names, quickly reloaded, and are re-applied across sessions so you can maintain multiple strategies per market without editing code.
 
-Copy `docs/examples/sample_region.json` into `assets/configs/<code>.json`, adjust the fields, and place the matching CSV under `assets/.markets/<code>.csv`. The sample demonstrates:
+## Extending the Market Catalogue
+Detailed configuration is the heart of Stock CLI, and you can replicate the CN setup to support any other exchange.
 
-- `storage` overrides for snapshots/presets directories.
-- Snapshot and history request templates with `{region}` and `{symbol}` placeholders.
-- JSON response mappings for both tabular and historical data.
+![Region descriptor overview](../img/region_config(1).png)
+![Response mapping details](../img/region_config(2).png)
 
-Remember to keep the CSV and JSON in sync and restart the CLI (or trigger a market reload) so the new descriptor is picked up.
+1. **Start from the template** – copy `docs/examples/sample_region.json` into `assets/configs/<your_region>.json`. Replace the `code`, `name`, and `stock_list.file` fields to match your market. The screenshots above highlight how request templates and response mappings line up with remote APIs.
+2. **Describe data ingestion** – fill in the `provider.snapshot` and `provider.history` sections:
+   - `url_template` and optional headers control how the CLI issues HTTP calls.
+   - `response` blocks specify how to map JSON fields into the unified snapshot table or historical OHLC rows.
+   - Adjust `limit` if the new market exposes a different lookback length.
+3. **Provide the instrument list** – create `assets/.markets/<your_region>.csv` with the tickers and any extra columns referenced by the descriptor.
+4. **Reload the app** – restart the CLI or trigger the *Reload Markets* command from the UI. The new region appears in the market selector, enabling snapshots, history downloads, and filter presets for your custom exchange.
+
+Because controllers and UI components only touch the `RegionDescriptor`, you can iterate on CSV and JSON files while the application is running, making it easy to validate new markets.
+
+## Runtime Layout
+- Live snapshots: `assets/snapshots/<region>/timestamp.csv`
+- Saved filters: `assets/filters/<region>/*.json`
+- Market manifests: `assets/.markets/<region>.csv`
+- Region descriptors: `assets/configs/<region>.json`
+
+Keep runtime outputs under `assets/snapshots/` and `assets/filters/` so that version control stays clean.
+
+## Build & Deploy
+- Install the current stable Rust toolchain (`rustup toolchain install stable`).
+- Build in release mode for deployment: `cargo build --release` (binary at `target/release/stock-cli`).
+- During development, run `cargo run` to start the TUI with debug logs.
+- Recommended checks before distributing:
+  - `cargo fmt`
+  - `cargo clippy -- -D warnings`
+  - `cargo test`
+- To package for other machines, copy the compiled binary together with the `assets/` directory so the region descriptors, snapshots, and presets remain available.

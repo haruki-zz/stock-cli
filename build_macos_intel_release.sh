@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build a macOS Intel (x86_64) release binary and package it
-# together with README, docs, and assets into a tar.gz bundle ready
+# together with README, docs, assets, deploy script, and Cargo manifest into a tar.gz bundle ready
 # for distribution.
 # Usage: ./build_macos_intel_release.sh [TAG]
 # Example: ./build_macos_intel_release.sh v1.2.3
@@ -23,7 +23,7 @@ echo "==> Building release for ${TARGET_TRIPLE}"
 cargo build --release --target ${TARGET_TRIPLE}
 
 echo "==> Verifying required files"
-for f in README.md; do
+for f in README.md deploy.sh Cargo.toml; do
   if [[ ! -f "$f" ]]; then
     echo "Missing required file: $f" >&2
     exit 1
@@ -45,6 +45,8 @@ mkdir -p "${STAGING_DIR}"
 trap 'rm -rf "${STAGING_DIR}"' EXIT
 cp "target/${TARGET_TRIPLE}/release/${APP_NAME}" "${STAGING_DIR}/${APP_NAME}"
 cp README.md "${STAGING_DIR}/"
+cp deploy.sh "${STAGING_DIR}/"
+cp Cargo.toml "${STAGING_DIR}/"
 cp -R docs "${STAGING_DIR}/"
 cp -R assets "${STAGING_DIR}/"
 

@@ -9,5 +9,7 @@ Learn more about the full feature set:
 - [中文说明](./docs/README_zh.md)
 
 ## Deployment Options
+### Option 1 
 - **Source build (requires Rust)** – install the stable toolchain, run `cargo build --release`, and distribute the resulting binary together with the `assets/` directory.
+### Option 2 
 - **Prebuilt archive (no Rust needed)** – download the packaged release, extract it, run `./deploy.sh` (or `./deploy.sh /path/to/stock-cli`) once to remove the macOS quarantine flag, then start `stock-cli`.

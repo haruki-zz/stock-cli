@@ -9,7 +9,7 @@
 ## Market Assets
 - `.markets/<code>.csv`：列出可查询的股票代码、名称以及额外元数据列（顺序在配置中声明）。
 - `configs/<code>.json`：声明快照/历史接口、请求模板、响应字段映射、默认阈值与展示偏好。
-- `filters/<code>/` 与 `snapshots/<code>/`：仍按区域分目录写入，保持向后兼容。
+- `filters/<code>/` 与 `snapshots/<code>/`：仍按区域分目录写入，保持向后兼容性。
 - 新增市场流程：复制示例 CSV/JSON，调整字段后触发“重新加载市场”即可。
 
 ## Behaviour Highlights

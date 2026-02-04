@@ -9,4 +9,4 @@
 - [x] Update `records` 层根据 `RegionDescriptor` 决定输出目录，保持现有快照与预设 API 行为不变。（see `src/config/mod.rs`, `src/config/loader.rs`, `src/records/mod.rs`）
 - [x] Wire UI 市场选择器到 `MarketRegistry`，并确保阈值编辑器读取配置中的指标/默认值，同时监听 registry 更新以便热刷新。（see `src/app/controller.rs`, `src/ui/components/chart.rs`, `src/ui/flows/results.rs`）
 - [x] Add 回归 测试：最小端到端跑通配置加载、快照抓取模拟、阈值保存路由（可通过feature或集成测试实现）。（see `tests/regression.rs`, `src/lib.rs`)
-- [x] 编写面向用户的示例配置（`docs/examples/<region>.json`），说明新增市场的必填字段与约束。（see `docs/examples/sample_region.json`, README updates）
+- [x] 编写面向用户的示例配置（`docs/examples/<region>.json`），说明新增市场的必填字段与约束（see `docs/examples/sample_region.json`, README updates）

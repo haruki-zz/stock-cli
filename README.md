@@ -4,7 +4,7 @@ Stock CLI is a Ratatui-based terminal assistant for A-share screening: it captur
 
 ![Filtered list and K-line](./img/list_and_K-line.png)
 
-Learn more about the full feature set:
+Learn more about it:
 - [English](./docs/README_en.md)
 - [中文](./docs/README_zh.md)
 

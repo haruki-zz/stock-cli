@@ -1,8 +1,8 @@
 # Repository Guidelines
 
 ## Overview
-- `src/main.rs` 调用 `app::bootstrap`，初始化 `MarketRegistry`、加载配置驱动的 `RegionDescriptor`，并启动 Ratatui UI。
-- 核心模块：`src/app`（控制流与市场切换）、`src/config`（CSV/JSON 描述符加载）、`src/fetch`（快照与历史抓取）、`src/records`（CSV/预设持久化）、`src/ui`（组件与流程）、`src/utils`（通用工具）、`src/error.rs`（错误枚举）。
+- `src/main.rs` 调用 `app::bootstrap`，初始化 `MarketRegistry`、加载配置驱动的 `RegionDescriptor`，并启动 Ratatui UI
+- 核心模块：`src/app`（控制流与市场切换）、`src/config`（CSV/JSON 描述符加载）、`src/fetch`（快照与历史抓取）、`src/records`（CSV/预设持久化）、`src/ui`（组件与流程）、`src/utils`（通用工具）、`src/error.rs`（错误枚举）
 - 每个市场由 `assets/.markets/<code>.csv` 与 `assets/configs/<code>.json` 定义；运行时无需改动源码即可新增。
 - `AppController` 和 UI 仅与 `RegionDescriptor` 交互，确保数据来源可被热加载与验证。
 

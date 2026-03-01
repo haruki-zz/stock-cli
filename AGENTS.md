@@ -13,9 +13,9 @@
 - 新增市场流程：复制示例 CSV/JSON，调整字段后触发“重新加载市场”即可。
 
 ## Behaviour Highlights
-- Snapshots：并发抓取、自动判别防火墙错误，依据 JSON 描述的 `response` 映射解析字段，并写入 `snapshots/<code>/timestamp.csv`。
-- History：使用同一描述符生成请求，支持 OHLCV、JSON path 或自定义解码方式，驱动多时间范围图表。
-- Threshold editor：读取配置提供的指标与默认值；保存仍写入 `filters/<code>/preset.json`。
+- Snapshots：并发抓取、自动判别防火墙错误，依据 JSON 描述的 `response` 映射解析字段，并写入 `snapshots/<code>/timestamp.csv`
+- History：使用同一描述符生成请求，支持 OHLCV、JSON path 或自定义解码方式，驱动多时间范围图表
+- Threshold editor：读取配置提供的指标与默认值；保存仍写入 `filters/<code>/preset.json`
 - Market selection：UI 通过 `MarketRegistry` 实时拉取可用市场，支持热加载或配置失败提示。
 
 ## Development Commands
